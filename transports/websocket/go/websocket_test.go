@@ -1,4 +1,4 @@
-package ws_test
+package websocket_test
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Bitspark/nightseam/duplex/go"
-	"github.com/Bitspark/nightseam/duplex/go/duplextest"
-	"github.com/Bitspark/nightseam/duplex/go/ws"
+	transports "github.com/Bitspark/bitruntime/transports/go"
+	"github.com/Bitspark/bitruntime/transports/go/transporttest"
+	ws "github.com/Bitspark/bitruntime/transports/websocket/go"
 )
 
 // connect opens a WebSocket pair over a test server and wraps both ends.
-func connect(t *testing.T, limit int64) (duplex.Conn, duplex.Conn) {
+func connect(t *testing.T, limit int64) (transports.Conn, transports.Conn) {
 	t.Helper()
 	accepted := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,5 +41,5 @@ func connect(t *testing.T, limit int64) (duplex.Conn, duplex.Conn) {
 // TestWebSocketIsAConformingTransport: a WebSocket keeps every promise of
 // the seam, so the profile and the relays above it may forget it is one.
 func TestWebSocketIsAConformingTransport(t *testing.T) {
-	duplextest.Run(t, connect)
+	transporttest.Run(t, connect)
 }

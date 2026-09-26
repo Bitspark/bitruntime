@@ -1,4 +1,4 @@
-package runtime
+package profile
 
 import (
 	"encoding/json"
@@ -51,10 +51,6 @@ func TestStrictEncoderPreservesValidEncoding(t *testing.T) {
 			Empty   string `json:",omitempty"`
 			Number  int    `json:",string"`
 		}{embedded{"<😀�>"}, string([]byte{0xff}), "", 42},
-		struct {
-			Absent Optional[string] `json:",omitzero"`
-			Null   Nullable[string]
-		}{Optional[string]{Value: string([]byte{0xff})}, Null[string]()},
 		map[string]any{"z": json.Number("1e100"), "a": []byte{0xff, 0xfe}, "raw": json.RawMessage(`{"a": 1}`)},
 	} {
 		want, err := json.Marshal(value)

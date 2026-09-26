@@ -1,4 +1,4 @@
-package duplex
+package transports
 
 import (
 	"context"
@@ -11,7 +11,8 @@ import (
 // as a socket holds some bytes; past that a Send waits for a Receive, so
 // the pipe carries backpressure as a transport does. A Close on one end is
 // a CloseError on the other; an Abort is CodeAbnormalClosure there, as a
-// dropped socket would be. It carries the duplex profile in tests without
+// dropped socket would be. A frame over the receiver's limit ends the pipe
+// with CodeTooLarge on both sides. It carries the protocol in tests without
 // a socket, and it is the transport a protocol is held to before a real one
 // is.
 func Pipe(limit int64) (Conn, Conn) {
@@ -88,8 +89,10 @@ func (e *pipeEnd) Receive(ctx context.Context) (Frame, error) {
 	}
 	deliver := func(frame Frame) (Frame, error) {
 		if e.limit > 0 && int64(len(frame.Data)) > e.limit {
-			_ = e.Abort()
-			return Frame{}, fmt.Errorf("duplex frame of %d bytes exceeds the receive limit of %d", len(frame.Data), e.limit)
+			// The receiver refuses with 1009, as a WebSocket closes on its read
+			// limit, so the sender observes why rather than an abort.
+			e.end(&CloseError{Code: CodeTooLarge, Reason: "frame exceeds the receive limit"})
+			return Frame{}, fmt.Errorf("transport frame of %d bytes exceeds the receive limit of %d", len(frame.Data), e.limit)
 		}
 		return frame, nil
 	}
@@ -113,6 +116,9 @@ func (e *pipeEnd) Receive(ctx context.Context) (Frame, error) {
 }
 
 func (e *pipeEnd) Close(ctx context.Context, code Code, reason string) error {
+	if !Sendable(code) {
+		return ErrUnsendableCode
+	}
 	e.end(&CloseError{Code: code, Reason: reason})
 	return nil
 }

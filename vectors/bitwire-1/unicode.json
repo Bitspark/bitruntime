@@ -1,0 +1,25 @@
+{
+  "description": "Unicode scalar strings, tested before JSON decoding can replace malformed escapes. Each raw member is JSON source carried as a string so the table itself is well-formed Unicode.",
+  "rows": [
+    {"name":"ASCII", "raw":"\"hello\"", "valid":true},
+    {"name":"escaped emoji", "raw":"\"\\uD83D\\uDE00\"", "valid":true},
+    {"name":"literal emoji", "raw":"\"😀\"", "valid":true},
+    {"name":"ordinary replacement character", "raw":"\"�\"", "valid":true},
+    {"name":"escaped replacement character", "raw":"\"\\uFFFD\"", "valid":true},
+    {"name":"surrogate spelling is ASCII text", "raw":"\"\\\\uD800\"", "valid":true},
+    {"name":"scalar limits", "raw":"[\"\\uD7FF\",\"\\uE000\",\"\\uDBFF\\uDFFF\"]", "valid":true},
+    {"name":"paired member name", "raw":"{\"\\uD83D\\uDE00\":1}", "valid":true},
+    {"name":"high surrogate", "raw":"\"\\uD800\"", "valid":false},
+    {"name":"low surrogate", "raw":"\"\\uDC00\"", "valid":false},
+    {"name":"high limit", "raw":"\"\\uDBFF\"", "valid":false},
+    {"name":"low limit", "raw":"\"\\uDFFF\"", "valid":false},
+    {"name":"reversed pair", "raw":"\"\\uDE00\\uD83D\"", "valid":false},
+    {"name":"two high surrogates", "raw":"\"\\uD800\\uDBFF\"", "valid":false},
+    {"name":"separated pair", "raw":"\"\\uD83Dx\\uDE00\"", "valid":false},
+    {"name":"pair split between strings", "raw":"[\"\\uD83D\",\"\\uDE00\"]", "valid":false},
+    {"name":"high followed by escaped backslash", "raw":"\"\\uD800\\\\uDC00\"", "valid":false},
+    {"name":"nested arbitrary JSON", "raw":"{\"a\":[{\"b\":\"\\ud800\"}]}", "valid":false},
+    {"name":"malformed member name", "raw":"{\"\\uD800\":1}", "valid":false},
+    {"name":"overwritten malformed value", "raw":"{\"same\":\"\\uD800\",\"same\":\"valid\"}", "valid":false}
+  ]
+}
