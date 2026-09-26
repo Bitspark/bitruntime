@@ -1,9 +1,11 @@
-package runtime
+package core
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+
+	"github.com/Bitspark/bitruntime/internal/profile/go"
 )
 
 // Trace is the W3C Trace Context a frame carries: the two members verbatim,
@@ -22,7 +24,7 @@ type Propagator interface {
 	Inject(ctx context.Context) Trace
 }
 
-// DefaultPropagator is what a peer with no Options.Propagator propagates by: it
+// DefaultPropagator is what a carrier with no Propagator option uses: it
 // keeps an incoming trace verbatim and mints an outgoing one's ids itself, so
 // that frames correlate across hops with no tracing library installed.
 var DefaultPropagator Propagator = w3cPropagator{}
@@ -55,7 +57,7 @@ func (w3cPropagator) Extract(ctx context.Context, trace Trace) context.Context {
 // span id of this frame's own — or a new trace where the context carries none.
 func (w3cPropagator) Inject(ctx context.Context) Trace {
 	parent, ok := TraceOf(ctx)
-	if !ok || !validTraceparent(parent.Parent) {
+	if !ok || !profile.ValidTraceparent(parent.Parent) {
 		return Trace{Parent: "00-" + randomID(16) + "-" + randomID(8) + "-01"}
 	}
 	return Trace{Parent: parent.Parent[:36] + randomID(8) + parent.Parent[52:], State: parent.State}

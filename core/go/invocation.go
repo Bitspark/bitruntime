@@ -1,4 +1,4 @@
-package runtime
+package core
 
 import (
 	"errors"
@@ -6,14 +6,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/Bitspark/nightseam/duplex/go"
+	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
-// An admitted request's return capability is the invocation, presented as a
-// Wire. The empty path carries its outcome, as it always has; these operations
+// An admitted request's return capability is the invocation, presented as
+// addressed access. The empty path carries its outcome, as it always has; these operations
 // carry its lifecycle. They are ordinary events of the profile — a layer's own
 // vocabulary, as `channel.` is the tunnel's — and a participant needs nothing
-// of Nightseam's to speak them but the Wire it was already handed.
+// of bitruntime's to speak them but the return capability it was handed.
 //
 // The capture or body a verb is about is one opaque segment after the
 // operation, because a path is what addresses a thing. The verbs never reach a
@@ -78,13 +78,13 @@ func nextInvocationIdentifier() string {
 	return strconv.FormatUint(invocationIdentifier.Add(1), 10)
 }
 
-func invocationEvent() duplex.ProfileFrame {
-	return duplex.ProfileFrame{Version: 1, Kind: duplex.ProfileEvent, Data: []byte("null")}
+func invocationEvent() wire.ProfileFrame {
+	return wire.ProfileFrame{Version: 1, Kind: wire.ProfileEvent, Data: []byte("null")}
 }
 
 // Invocation is the lifecycle an admitting runtime keeps for one admitted
 // request, and the answer its return capability gives to the vocabulary above.
-// A runtime that is not Nightseam's composes it — or answers the same paths
+// A runtime that is not bitruntime composes it — or answers the same paths
 // itself — and the same participants work against either.
 type Invocation struct {
 	mu           sync.Mutex
@@ -96,7 +96,7 @@ type Invocation struct {
 	unready      int
 	running      int
 	controls     int
-	control      *duplex.Message
+	control      *wire.Message
 	settled      bool
 	dispatchDone bool
 	retired      bool
@@ -104,7 +104,7 @@ type Invocation struct {
 }
 
 type invocationCapture struct {
-	sink     duplex.Wire
+	sink     wire.AddressedWire
 	ready    bool
 	notified bool
 }
@@ -130,7 +130,7 @@ func NewInvocation(limits InvocationLimits, onRetired func()) *Invocation {
 
 // Deliver answers one operation of the invocation vocabulary. A return
 // capability routes every nonempty path here; the empty path stays its own.
-func (v *Invocation) Deliver(path []string, message duplex.Message) error {
+func (v *Invocation) Deliver(path []string, message wire.Message) error {
 	if v == nil {
 		return ErrInvocationUnsupported
 	}
@@ -139,7 +139,7 @@ func (v *Invocation) Deliver(path []string, message duplex.Message) error {
 	}
 	switch path[0] {
 	case InvocationControl:
-		if len(path) != 1 || message.Frame.Kind != duplex.ProfileCancel {
+		if len(path) != 1 || message.Frame.Kind != wire.ProfileCancel {
 			return ErrInvocationUnsupported
 		}
 		v.latch(message)
@@ -148,7 +148,7 @@ func (v *Invocation) Deliver(path []string, message duplex.Message) error {
 	default:
 		return ErrInvocationUnsupported
 	}
-	if len(path) != 2 || message.Frame.Kind != duplex.ProfileEvent {
+	if len(path) != 2 || message.Frame.Kind != wire.ProfileEvent {
 		return ErrInvocationUnsupported
 	}
 	identifier := path[1]
@@ -207,7 +207,7 @@ func (v *Invocation) Retired() bool {
 	return v.retired
 }
 
-func (v *Invocation) capture(identifier string, sink duplex.Wire) error {
+func (v *Invocation) capture(identifier string, sink wire.AddressedWire) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if v.retired {
@@ -234,11 +234,11 @@ func (v *Invocation) ready(identifier string) {
 	}
 	capture.ready = true
 	v.unready--
-	var sinks []duplex.Wire
-	var control duplex.Message
+	var sinks []wire.AddressedWire
+	var control wire.Message
 	if v.control != nil && !capture.notified {
 		capture.notified = true
-		sinks, control = []duplex.Wire{capture.sink}, *v.control
+		sinks, control = []wire.AddressedWire{capture.sink}, *v.control
 		v.controls++
 	}
 	retire := v.retireLocked()
@@ -300,14 +300,14 @@ func (v *Invocation) done(identifier string) {
 // latch records the first cancellation and pushes it to every capture that
 // is already ready. A capture installed while it is latched receives it when
 // its own request delivery becomes ready. Further controls coalesce.
-func (v *Invocation) latch(message duplex.Message) {
+func (v *Invocation) latch(message wire.Message) {
 	v.mu.Lock()
 	if v.retired || v.control != nil {
 		v.mu.Unlock()
 		return
 	}
 	v.control = &message
-	var sinks []duplex.Wire
+	var sinks []wire.AddressedWire
 	for _, capture := range v.captures {
 		if capture.ready && !capture.notified {
 			capture.notified = true
@@ -322,7 +322,7 @@ func (v *Invocation) latch(message duplex.Message) {
 // push runs participant code outside the lock and retains one control
 // reservation until every selected continuation has returned, so that
 // retirement cannot reclaim a capture a control is still reaching.
-func (v *Invocation) push(sinks []duplex.Wire, message duplex.Message) {
+func (v *Invocation) push(sinks []wire.AddressedWire, message wire.Message) {
 	defer func() {
 		v.mu.Lock()
 		v.controls--
@@ -357,17 +357,17 @@ func invocationNotify(callback func()) {
 
 // invocationSink is the Wire a capture is pushed its control through. It
 // accepts the invocation's cancellation at its own origin and nothing else.
-type invocationSink struct{ control func(duplex.Message) }
+type invocationSink struct{ control func(wire.Message) }
 
-func (s *invocationSink) Send(path []string, message duplex.Message) error {
-	if len(path) != 0 || message.Frame.Kind != duplex.ProfileCancel {
+func (s *invocationSink) Send(path []string, message wire.Message) error {
+	if len(path) != 0 || message.Frame.Kind != wire.ProfileCancel {
 		return errors.New("an invocation control sink carries cancellation only")
 	}
 	s.control(message)
 	return nil
 }
 
-func invocationWire(message duplex.Message) (duplex.Wire, error) {
+func invocationWire(message wire.Message) (wire.AddressedWire, error) {
 	if message.Return == nil || message.Return.Wire == nil {
 		return nil, ErrInvocationUnsupported
 	}
@@ -378,7 +378,7 @@ func invocationWire(message duplex.Message) (duplex.Wire, error) {
 // for one traversal of one admitted invocation. Repeated traversal of the same
 // dispatcher takes a fresh handle, so no two traversals share a slot.
 type InvocationCaptureHandle struct {
-	wire       duplex.Wire
+	wire       wire.AddressedWire
 	identifier string
 	once       sync.Once
 	released   sync.Once
@@ -391,17 +391,17 @@ type InvocationCaptureHandle struct {
 // A return capability that does not speak the vocabulary refuses, and the
 // refusal is the caller's to answer: routing an invocation-aware request with
 // weaker cancellation guarantees is exactly what this reports instead.
-func CaptureInvocation(message duplex.Message, control func(duplex.Message)) (*InvocationCaptureHandle, error) {
-	wire, err := invocationWire(message)
+func CaptureInvocation(message wire.Message, control func(wire.Message)) (*InvocationCaptureHandle, error) {
+	access, err := invocationWire(message)
 	if err != nil {
 		return nil, err
 	}
 	if control == nil {
 		return nil, errors.New("an invocation capture requires a control sink")
 	}
-	handle := &InvocationCaptureHandle{wire: wire, identifier: nextInvocationIdentifier()}
-	sent := duplex.Message{Frame: invocationEvent(), Return: &duplex.ReturnAddress{Wire: &invocationSink{control: control}}}
-	if err := wire.Send([]string{InvocationCapture, handle.identifier}, sent); err != nil {
+	handle := &InvocationCaptureHandle{wire: access, identifier: nextInvocationIdentifier()}
+	sent := wire.Message{Frame: invocationEvent(), Return: &wire.ReturnAddress{Wire: &invocationSink{control: control}}}
+	if err := access.Send([]string{InvocationCapture, handle.identifier}, sent); err != nil {
 		return nil, err
 	}
 	return handle, nil
@@ -414,7 +414,7 @@ func (c *InvocationCaptureHandle) Ready() {
 		return
 	}
 	c.once.Do(func() {
-		_ = c.wire.Send([]string{InvocationReady, c.identifier}, duplex.Message{Frame: invocationEvent()})
+		_ = c.wire.Send([]string{InvocationReady, c.identifier}, wire.Message{Frame: invocationEvent()})
 	})
 }
 
@@ -425,13 +425,13 @@ func (c *InvocationCaptureHandle) Release() {
 		return
 	}
 	c.released.Do(func() {
-		_ = c.wire.Send([]string{InvocationRelease, c.identifier}, duplex.Message{Frame: invocationEvent()})
+		_ = c.wire.Send([]string{InvocationRelease, c.identifier}, wire.Message{Frame: invocationEvent()})
 	})
 }
 
 // InvocationBodyHandle is one execution lease of one admitted invocation.
 type InvocationBodyHandle struct {
-	wire       duplex.Wire
+	wire       wire.AddressedWire
 	identifier string
 	once       sync.Once
 }
@@ -440,13 +440,13 @@ type InvocationBodyHandle struct {
 // The invocation does not retire while the lease is held, so an early answer
 // to the caller — a deadline, a withdrawal — never retires an invocation whose
 // body is still running.
-func BeginInvocationBody(message duplex.Message) (*InvocationBodyHandle, error) {
-	wire, err := invocationWire(message)
+func BeginInvocationBody(message wire.Message) (*InvocationBodyHandle, error) {
+	access, err := invocationWire(message)
 	if err != nil {
 		return nil, err
 	}
-	handle := &InvocationBodyHandle{wire: wire, identifier: nextInvocationIdentifier()}
-	if err := wire.Send([]string{InvocationBegin, handle.identifier}, duplex.Message{Frame: invocationEvent()}); err != nil {
+	handle := &InvocationBodyHandle{wire: access, identifier: nextInvocationIdentifier()}
+	if err := access.Send([]string{InvocationBegin, handle.identifier}, wire.Message{Frame: invocationEvent()}); err != nil {
 		return nil, err
 	}
 	return handle, nil
@@ -459,7 +459,7 @@ func (b *InvocationBodyHandle) Done() {
 		return
 	}
 	b.once.Do(func() {
-		_ = b.wire.Send([]string{InvocationDone, b.identifier}, duplex.Message{Frame: invocationEvent()})
+		_ = b.wire.Send([]string{InvocationDone, b.identifier}, wire.Message{Frame: invocationEvent()})
 	})
 }
 
@@ -467,10 +467,10 @@ func (b *InvocationBodyHandle) Done() {
 // latches it and pushes it to the traversals that captured it. A router that
 // receives a control frame relays it here rather than resolving a route of its
 // own: the capture, not the current registration, decides where it goes.
-func RelayInvocationControl(message duplex.Message) error {
-	wire, err := invocationWire(message)
+func RelayInvocationControl(message wire.Message) error {
+	access, err := invocationWire(message)
 	if err != nil {
 		return err
 	}
-	return wire.Send([]string{InvocationControl}, message)
+	return access.Send([]string{InvocationControl}, message)
 }

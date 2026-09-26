@@ -1,4 +1,7 @@
-package runtime
+// Package websocket sets up bitwire/1 connections over WebSockets: Accept and
+// NewHandler serve the protocol at an HTTP endpoint, and Dial connects to one.
+// Each returns an engine.Peer that owns its connection.
+package websocket
 
 import (
 	"context"
@@ -9,62 +12,61 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Bitspark/nightseam/duplex/go"
-	"github.com/Bitspark/nightseam/duplex/go/ws"
+	core "github.com/Bitspark/bitruntime/core/go"
+	engine "github.com/Bitspark/bitruntime/engine/go"
+	transports "github.com/Bitspark/bitruntime/transports/go"
+	ws "github.com/Bitspark/bitruntime/transports/websocket/go"
 )
 
 // ServerOptions requires an explicit authentication and origin policy. The
 // authenticated context is the base context for every incoming invocation.
 type ServerOptions struct {
-	Options      Options
+	Options      engine.Options
 	Authenticate func(*http.Request) (context.Context, error)
 	CheckOrigin  func(*http.Request) bool
 	// OnConnect is called with a peer that is already live: it has read
-	// frames and may have answered them. It is where a server uses the peer
-	// — calls it, keeps it, waits on it. What a peer must serve is installed
-	// in Options.Prepare, which runs before it reads anything; a handler
-	// installed here can be too late for the other side's first request.
-	OnConnect func(*Peer)
+	// frames and may have answered them. What a peer must serve is attached
+	// in Options.Prepare, which runs before it reads anything.
+	OnConnect func(*engine.Peer)
 	// Subprotocols are what the server will select, in its own order of
-	// preference, from what a client offers; empty selects none, which is
-	// the default and what every consumer that sets nothing keeps. The
-	// profile names itself here nowhere and refuses nothing on this ground
-	// (docs/wire/profile.md).
+	// preference, from what a client offers; empty selects none, which is the
+	// default. bitwire/1 names itself nowhere here and refuses nothing on
+	// this ground.
 	Subprotocols []string
 	// SelectSubprotocol answers with the one subprotocol to select out of
 	// what this request offered, "" for none. It is the selection, not a
 	// filter over Subprotocols: a browser's ticket travels in the offer and
-	// is accepted only if it is selected back unchanged, which no fixed
-	// list can do. Nil selects the first offered that Subprotocols names.
+	// is accepted only if it is selected back unchanged. Nil selects the
+	// first offered that Subprotocols names.
 	SelectSubprotocol func(r *http.Request, offered []string) string
 }
 
 func (o ServerOptions) validate() error {
 	if o.Authenticate == nil || o.CheckOrigin == nil {
-		return errors.New("duplex server requires explicit authentication and origin policies")
+		return errors.New("bitruntime: a server requires explicit authentication and origin policies")
 	}
-	_, err := o.Options.normalized()
+	_, err := o.Options.Normalized()
 	return err
 }
 
-// Accept upgrades an authenticated request to a WebSocket and speaks the
-// profile over it. The caller must keep its HTTP handler alive until
+// Accept upgrades an authenticated request to a WebSocket and speaks
+// bitwire/1 over it. The caller must keep its HTTP handler alive until
 // Peer.Done; NewHandler implements that lifetime contract.
-func Accept(w http.ResponseWriter, r *http.Request, options ServerOptions) (*Peer, error) {
+func Accept(w http.ResponseWriter, r *http.Request, options ServerOptions) (*engine.Peer, error) {
 	if err := options.validate(); err != nil {
 		http.Error(w, "Invalid server configuration", http.StatusInternalServerError)
 		return nil, err
 	}
 	if !options.CheckOrigin(r) {
 		http.Error(w, "Origin denied", http.StatusForbidden)
-		return nil, errors.New("duplex origin denied")
+		return nil, errors.New("bitruntime: origin denied")
 	}
 	ctx, err := options.Authenticate(r)
 	if err != nil || ctx == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return nil, errors.New("duplex authentication failed")
+		return nil, errors.New("bitruntime: authentication failed")
 	}
-	o, _ := options.Options.normalized()
+	o, _ := options.Options.Normalized()
 	accept := &websocket.AcceptOptions{InsecureSkipVerify: true, Subprotocols: options.Subprotocols}
 	if options.SelectSubprotocol != nil {
 		// The library selects the first offered that it is given; given the
@@ -80,12 +82,11 @@ func Accept(w http.ResponseWriter, r *http.Request, options ServerOptions) (*Pee
 		return nil, err
 	}
 	conn := ws.New(socket, o.MaxFrameBytes)
-	peer, err := newPeer(ctx, conn, ServerRole, options.Options, socket.Subprotocol())
+	peer, err := engine.NewPeer(ctx, conn, engine.ServerRole, options.Options)
 	if err != nil {
-		// Everything else newPeer refuses was refused by validate above, so
+		// Everything else NewPeer refuses was refused by validate above, so
 		// this is Prepare's own error: the upgrade is answered and the
-		// profile will not be spoken over it, and a socket left open in
-		// silence behind a 101 is the one thing the client cannot read.
+		// protocol will not be spoken over it.
 		refuseConnection(conn, o.WriteTimeout)
 		return nil, err
 	}
@@ -93,18 +94,16 @@ func Accept(w http.ResponseWriter, r *http.Request, options ServerOptions) (*Pee
 }
 
 // refuseConnection ends a socket the handshake opened and the peer above it
-// never took, with the code a policy refusal carries everywhere (1008) rather
-// than the abort a live peer's failure would leave.
-func refuseConnection(conn duplex.Conn, timeout time.Duration) {
+// never took, with the code a policy refusal carries everywhere (1008).
+func refuseConnection(conn transports.Conn, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	_ = conn.Close(ctx, duplex.CodePolicyViolation, "the connection was refused before the profile began")
+	_ = conn.Close(ctx, transports.CodePolicyViolation, "the connection was refused before the protocol began")
 }
 
-// NewHandler serves the profile at an HTTP endpoint: each request that
-// passes CheckOrigin and Authenticate is upgraded to a WebSocket and becomes
-// a server-role peer with the options given. The generated binding's
-// NewHandler wraps this with the family's handlers installed.
+// NewHandler serves bitwire/1 at an HTTP endpoint: each request that passes
+// CheckOrigin and Authenticate is upgraded to a WebSocket and becomes a
+// server-role peer with the options given.
 func NewHandler(options ServerOptions) (http.Handler, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
@@ -126,37 +125,33 @@ func NewHandler(options ServerOptions) (http.Handler, error) {
 }
 
 // DialOptions is what Dial opens a WebSocket with: the peer's Options, the
-// headers and client of the HTTP upgrade, the bound on the handshake, and
-// the subprotocols to offer.
+// headers and client of the HTTP upgrade, the bound on the handshake, and the
+// subprotocols to offer.
 type DialOptions struct {
-	Options    Options
+	Options    engine.Options
 	HTTPHeader http.Header
 	HTTPClient *http.Client
-	// ConnectTimeout bounds the handshake alone, as TypeScript's
-	// connectTimeoutMs does, and takes the same default of 30 seconds where
-	// it is zero. A dial that has not become a connection by then is refused
-	// with the code connect_timeout and nothing is opened; the connection's
-	// own lifetime is the context's, as it is without one.
+	// ConnectTimeout bounds the handshake alone, defaulting to 30 seconds. A
+	// dial that has not become a connection by then is refused with the code
+	// connect_timeout and nothing is opened.
 	ConnectTimeout time.Duration
 	// Subprotocols are offered to the server in order of preference; the
-	// default offers none. A server that selects none leaves the connection
-	// with none and the profile is spoken over it either way — but a browser
-	// refuses a handshake whose offer went unselected, so a client that
-	// offers must be met by a server that selects (docs/wire/profile.md).
+	// default offers none. A browser refuses a handshake whose offer went
+	// unselected, so a client that offers must be met by a server that
+	// selects.
 	Subprotocols []string
 }
 
-// Dial opens a WebSocket and speaks the profile over it. It uses ctx for the
-// handshake and the connection lifetime. Use a separate context for each
-// Call; cancelling the dialing context disconnects the peer.
-func Dial(ctx context.Context, url string, options DialOptions) (*Peer, *http.Response, error) {
+// Dial opens a WebSocket and speaks bitwire/1 over it. It uses ctx for the
+// handshake and the connection lifetime: cancelling it disconnects the peer.
+func Dial(ctx context.Context, url string, options DialOptions) (*engine.Peer, *http.Response, error) {
 	if ctx == nil {
-		return nil, nil, errors.New("duplex dial requires a context")
+		return nil, nil, errors.New("bitruntime: dial requires a context")
 	}
 	if options.ConnectTimeout < 0 {
-		return nil, nil, errors.New("duplex connect timeout must not be negative")
+		return nil, nil, errors.New("bitruntime: connect timeout must not be negative")
 	}
-	o, err := options.Options.normalized()
+	o, err := options.Options.Normalized()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,16 +167,15 @@ func Dial(ctx context.Context, url string, options DialOptions) (*Peer, *http.Re
 	socket, response, err := websocket.Dial(dialing, url, &websocket.DialOptions{HTTPHeader: options.HTTPHeader, HTTPClient: options.HTTPClient, Subprotocols: options.Subprotocols})
 	if err != nil {
 		if ctx.Err() == nil && errors.Is(dialing.Err(), context.DeadlineExceeded) {
-			return nil, response, &PublicError{Code: "connect_timeout", Message: "Connection timed out."}
+			return nil, response, &core.PublicError{Code: "connect_timeout", Message: "Connection timed out."}
 		}
 		return nil, response, err
 	}
 	conn := ws.New(socket, o.MaxFrameBytes)
-	peer, err := newPeer(ctx, conn, ClientRole, options.Options, socket.Subprotocol())
+	peer, err := engine.NewPeer(ctx, conn, engine.ClientRole, options.Options)
 	if err != nil {
-		// As in Accept: the only error left here is Prepare's, and the
-		// server is told the connection was refused rather than left with a
-		// socket this side will never speak over.
+		// As in Accept: the only error left here is Prepare's, and the server
+		// is told the connection was refused.
 		refuseConnection(conn, o.WriteTimeout)
 		return nil, response, err
 	}

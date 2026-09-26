@@ -1,24 +1,19 @@
-package runtime
+package dispatch
 
 import (
 	"errors"
 	"slices"
 	"sync"
 
-	"github.com/Bitspark/nightseam/duplex/go"
+	core "github.com/Bitspark/bitruntime/core/go"
+	"github.com/Bitspark/bitruntime/internal/profile/go"
+	transports "github.com/Bitspark/bitruntime/transports/go"
+	wire "github.com/Bitspark/bitwire/wire/go"
 )
-
-// HandlerRegistry is the explicit registration capability used by generated
-// bindings. Closing it releases its registrations, not its borrowed carrier.
-type HandlerRegistry interface {
-	duplex.Wire
-	Register([]string, duplex.Receiver) (func(), error)
-	Close(duplex.Code, string) error
-}
 
 type dispatchRegistration struct {
 	path     []string
-	receiver duplex.Receiver
+	receiver wire.Receiver
 }
 type dispatchRoute struct {
 	name   string
@@ -31,9 +26,10 @@ type dispatchRoute struct {
 // request whose return capability carries none rather than routing it with
 // weaker detach and cancellation guarantees. An opaque wrapper is therefore as
 // good as a native endpoint: the lifecycle travels with the unchanged return
-// capability, and nothing here recognizes a concrete type.
+// capability, and nothing here recognizes a concrete type. A cancellation goes
+// to the traversal that captured its request, never to the route now in force.
 type Dispatcher struct {
-	root        duplex.Endpoint
+	root        wire.Endpoint
 	ownEndpoint bool
 	mu          sync.Mutex
 	closed      bool
@@ -45,15 +41,17 @@ type Dispatcher struct {
 // caller owns. Borrowed endpoints remain the default.
 type DispatcherOptions struct{ OwnEndpoint bool }
 
-func NewDispatcher(root duplex.Endpoint, options ...DispatcherOptions) (*Dispatcher, error) {
+// NewDispatcher attaches to root and routes what it delivers. The endpoint is
+// borrowed unless options transfer its closure.
+func NewDispatcher(root wire.Endpoint, options ...DispatcherOptions) (*Dispatcher, error) {
 	if root == nil {
-		return nil, errors.New("dispatcher requires an endpoint")
+		return nil, errors.New("bitruntime: a dispatcher requires an endpoint")
 	}
 	d := &Dispatcher{root: root, routes: map[dispatchRoute]*dispatchRegistration{}}
 	if len(options) > 0 {
 		d.ownEndpoint = options[0].OwnEndpoint
 	}
-	detach, err := root.Receive(duplex.Receiver{Message: d.deliver, Closed: func(code duplex.Code, reason string) { _ = d.Close(code, reason) }})
+	detach, err := root.Receive(wire.Receiver{Message: d.deliver, Closed: func(code wire.Code, reason string) { _ = d.Close(code, reason) }})
 	if err != nil {
 		return nil, err
 	}
@@ -65,40 +63,47 @@ func NewDispatcher(root duplex.Endpoint, options ...DispatcherOptions) (*Dispatc
 	d.mu.Unlock()
 	if closed {
 		detach()
-		return nil, ErrClosed
+		return nil, transports.ErrClosed
 	}
 	return d, nil
 }
 
-func (d *Dispatcher) Send(path []string, message duplex.Message) error {
+// Send sends through the borrowed root.
+func (d *Dispatcher) Send(path []string, message wire.Message) error {
 	d.mu.Lock()
 	closed := d.closed
 	d.mu.Unlock()
 	if closed {
-		return ErrClosed
+		return transports.ErrClosed
 	}
 	return d.root.Send(path, message)
 }
-func (d *Dispatcher) Register(path []string, receiver duplex.Receiver) (func(), error) {
+
+// Register routes exactly path to receiver. A path has one registration.
+func (d *Dispatcher) Register(path []string, receiver wire.Receiver) (func(), error) {
 	return d.register(path, receiver, false)
 }
-func (d *Dispatcher) RegisterPrefix(path []string, receiver duplex.Receiver) (func(), error) {
+
+// RegisterPrefix routes path and every path beneath it, the longest registered
+// prefix winning, unless an exact registration matches.
+func (d *Dispatcher) RegisterPrefix(path []string, receiver wire.Receiver) (func(), error) {
 	return d.register(path, receiver, true)
 }
-func (d *Dispatcher) register(path []string, receiver duplex.Receiver, prefix bool) (func(), error) {
-	name, err := duplex.EncodePath(path)
+
+func (d *Dispatcher) register(path []string, receiver wire.Receiver, prefix bool) (func(), error) {
+	name, err := profile.EncodePath(path)
 	if err != nil {
-		return nil, err
+		return nil, core.ErrInvalidPath
 	}
 	key := dispatchRoute{name, prefix}
 	registration := &dispatchRegistration{path: slices.Clone(path), receiver: receiver}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.closed {
-		return nil, ErrClosed
+		return nil, transports.ErrClosed
 	}
 	if d.routes[key] != nil {
-		return nil, duplex.ErrReceiverExists
+		return nil, core.ErrReceiverExists
 	}
 	d.routes[key] = registration
 	return func() {
@@ -109,6 +114,7 @@ func (d *Dispatcher) register(path []string, receiver duplex.Receiver, prefix bo
 		d.mu.Unlock()
 	}, nil
 }
+
 func (d *Dispatcher) match(path []string, name string) *dispatchRegistration {
 	if exact := d.routes[dispatchRoute{name, false}]; exact != nil {
 		return exact
@@ -121,16 +127,17 @@ func (d *Dispatcher) match(path []string, name string) *dispatchRegistration {
 	}
 	return selected
 }
-func (d *Dispatcher) deliver(path []string, message duplex.Message) {
-	name, err := duplex.EncodePath(path)
+
+func (d *Dispatcher) deliver(path []string, message wire.Message) {
+	name, err := profile.EncodePath(path)
 	if err != nil {
 		return
 	}
 	// A control belongs to the traversal that captured it, never to the
 	// registration in force now. Handing it to the invocation is what keeps a
 	// detach or a rebind from retargeting an admitted request.
-	if message.Frame.Kind == duplex.ProfileCancel {
-		_ = RelayInvocationControl(message)
+	if message.Frame.Kind == wire.ProfileCancel {
+		_ = core.RelayInvocationControl(message)
 		return
 	}
 	d.mu.Lock()
@@ -140,35 +147,37 @@ func (d *Dispatcher) deliver(path []string, message duplex.Message) {
 	}
 	d.mu.Unlock()
 	if registration == nil || registration.receiver.Message == nil {
-		if message.Frame.Kind == duplex.ProfileRequest {
-			_ = sendWireResponse(message, nil, &PublicError{Code: "method_not_found", Message: "Unknown method"})
+		if message.Frame.Kind == wire.ProfileRequest {
+			_ = core.Respond(message, nil, &core.PublicError{Code: "method_not_found", Message: "Unknown method"})
 		}
 		return
 	}
 	delivered := slices.Clone(path)
-	if message.Frame.Kind != duplex.ProfileRequest {
+	if message.Frame.Kind != wire.ProfileRequest {
 		registration.receiver.Message(delivered, message)
 		return
 	}
-	capture, err := CaptureInvocation(message, func(control duplex.Message) {
+	capture, err := core.CaptureInvocation(message, func(control wire.Message) {
 		registration.receiver.Message(slices.Clone(delivered), control)
 	})
 	if err != nil {
 		// A bound reached is a refusal to try again at; a capability that
 		// carries no lifecycle is a request this dispatcher cannot route with
 		// the guarantees it advertises.
-		refusal := &PublicError{Code: "invalid_message", Message: "Invocation requires the lifecycle its return capability carries"}
-		if errors.Is(err, ErrInvocationLimit) {
-			refusal = &PublicError{Code: "busy", Message: "Invocation participation limit reached"}
+		refusal := &core.PublicError{Code: "invalid_message", Message: "Invocation requires the lifecycle its return capability carries"}
+		if errors.Is(err, core.ErrInvocationLimit) {
+			refusal = &core.PublicError{Code: "busy", Message: "Invocation participation limit reached"}
 		}
-		_ = sendWireResponse(message, nil, refusal)
+		_ = core.Respond(message, nil, refusal)
 		return
 	}
 	defer capture.Ready()
 	registration.receiver.Message(delivered, message)
 }
 
-func (d *Dispatcher) Close(code duplex.Code, reason string) error {
+// Close releases the routes and the root attachment, and closes the root only
+// when this dispatcher owns it.
+func (d *Dispatcher) Close(code wire.Code, reason string) error {
 	d.mu.Lock()
 	if d.closed {
 		d.mu.Unlock()
@@ -198,6 +207,7 @@ func (d *Dispatcher) Select(path []string) *SelectedEndpoint {
 	return &SelectedEndpoint{owner: d, prefix: slices.Clone(path)}
 }
 
+// SelectedEndpoint is a receiving view of a shared dispatcher at a prefix.
 type SelectedEndpoint struct {
 	owner      *Dispatcher
 	prefix     []string
@@ -206,44 +216,50 @@ type SelectedEndpoint struct {
 	attachment *selectedAttachment
 }
 type selectedAttachment struct {
-	receiver duplex.Receiver
+	receiver wire.Receiver
 	detach   func()
 }
 
+// Select narrows the view by a further prefix.
 func (s *SelectedEndpoint) Select(path []string) *SelectedEndpoint {
 	return s.owner.Select(append(slices.Clone(s.prefix), path...))
 }
-func (s *SelectedEndpoint) Send(path []string, message duplex.Message) error {
+
+// Send sends beneath the view's prefix through the shared root.
+func (s *SelectedEndpoint) Send(path []string, message wire.Message) error {
 	s.mu.Lock()
 	closed := s.closed
 	s.mu.Unlock()
 	if closed {
-		return ErrClosed
+		return transports.ErrClosed
 	}
 	return s.owner.Send(append(slices.Clone(s.prefix), path...), message)
 }
-func (s *SelectedEndpoint) Receive(receiver duplex.Receiver) (func(), error) {
+
+// Receive attaches the view's one receiver, which sees paths relative to the
+// view's prefix.
+func (s *SelectedEndpoint) Receive(receiver wire.Receiver) (func(), error) {
 	attachment := &selectedAttachment{receiver: receiver}
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
-		return nil, ErrClosed
+		return nil, transports.ErrClosed
 	}
 	if s.attachment != nil {
 		s.mu.Unlock()
-		return nil, duplex.ErrReceiverExists
+		return nil, core.ErrReceiverExists
 	}
 	s.attachment = attachment
 	s.mu.Unlock()
-	detach, err := s.owner.RegisterPrefix(s.prefix, duplex.Receiver{
-		Message: func(path []string, message duplex.Message) {
+	detach, err := s.owner.RegisterPrefix(s.prefix, wire.Receiver{
+		Message: func(path []string, message wire.Message) {
 			if receiver.Message != nil {
 				receiver.Message(slices.Clone(path[len(s.prefix):]), message)
-			} else if message.Frame.Kind == duplex.ProfileRequest {
-				_ = sendWireResponse(message, nil, &PublicError{Code: "method_not_found", Message: "Unknown method"})
+			} else if message.Frame.Kind == wire.ProfileRequest {
+				_ = core.Respond(message, nil, &core.PublicError{Code: "method_not_found", Message: "Unknown method"})
 			}
 		},
-		Closed: func(code duplex.Code, reason string) { s.remove(attachment, true, code, reason) },
+		Closed: func(code wire.Code, reason string) { s.remove(attachment, true, code, reason) },
 	})
 	s.mu.Lock()
 	active := s.attachment == attachment
@@ -259,11 +275,12 @@ func (s *SelectedEndpoint) Receive(receiver duplex.Receiver) (func(), error) {
 	}
 	if !active {
 		detach()
-		return nil, ErrClosed
+		return nil, transports.ErrClosed
 	}
 	return func() { s.remove(attachment, false, 0, "") }, nil
 }
-func (s *SelectedEndpoint) remove(attachment *selectedAttachment, tell bool, code duplex.Code, reason string) {
+
+func (s *SelectedEndpoint) remove(attachment *selectedAttachment, tell bool, code wire.Code, reason string) {
 	s.mu.Lock()
 	if s.attachment != attachment {
 		s.mu.Unlock()
@@ -279,7 +296,9 @@ func (s *SelectedEndpoint) remove(attachment *selectedAttachment, tell bool, cod
 		attachment.receiver.Closed(code, reason)
 	}
 }
-func (s *SelectedEndpoint) Close(code duplex.Code, reason string) error {
+
+// Close ends the view's route; it never closes the shared root.
+func (s *SelectedEndpoint) Close(code wire.Code, reason string) error {
 	s.mu.Lock()
 	s.closed = true
 	attachment := s.attachment

@@ -1,8 +1,8 @@
-package runtime
+package core
 
 import "errors"
 
-// UnpublishedError reports a local refusal before a frame entered the peer's
+// UnpublishedError reports a local refusal before a frame entered a carrier's
 // outbound queue or a local implementation dispatched. Its underlying cause
 // retains the ordinary public error or cancellation identity. A queued write failure or a remote response never
 // supplies this proof, even if it has the same error code or message.

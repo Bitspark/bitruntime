@@ -29,6 +29,9 @@ type connection struct {
 	done bool
 }
 
+// Subprotocol is what the WebSocket handshake selected, "" for none.
+func (c *connection) Subprotocol() string { return c.conn.Subprotocol() }
+
 func (c *connection) closed() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
