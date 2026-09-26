@@ -9,7 +9,9 @@ if (!revision || !/^[a-zA-Z0-9._-]+$/.test(revision)) {
 }
 const temp = mkdtempSync(join(tmpdir(), 'bitruntime-go-consumer-'));
 function run(args) {
-  const result = spawnSync('go', args, {cwd: temp, stdio: 'inherit'});
+  const result = spawnSync('go', args, {
+    cwd: temp, stdio: 'inherit', env: {...process.env, GOWORK: 'off'},
+  });
   if (result.status !== 0) throw new Error(`go ${args.join(' ')} failed`);
 }
 run(['mod', 'init', 'example.com/bitruntime-consumer']);
