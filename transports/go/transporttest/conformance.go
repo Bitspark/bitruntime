@@ -146,7 +146,9 @@ func Run(t *testing.T, connect Connect) {
 		defer b.Abort()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		go func() { _ = a.Send(ctx, transports.Frame{Kind: transports.Text, Data: bytes.Repeat([]byte("y"), 1025)}) }()
+		go func() {
+			_ = a.Send(ctx, transports.Frame{Kind: transports.Text, Data: bytes.Repeat([]byte("y"), 1025)})
+		}()
 		if frame, err := b.Receive(ctx); err == nil {
 			t.Fatalf("a frame of %d bytes was delivered over a limit of 1024", len(frame.Data))
 		}
