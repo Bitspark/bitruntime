@@ -26,6 +26,7 @@ function serve(port) {
           throw new PublicError('bad_request', 'refused on purpose', {n: 1});
         });
         handle(d, ['wait'], (_params, context) => new Promise((_resolve, reject) => {
+          emit(peer.wire(), ['waiting'], null, {context});
           context.signal.addEventListener('abort', () => {
             sawCancel = true;
             for (const wake of waiting) wake(true);

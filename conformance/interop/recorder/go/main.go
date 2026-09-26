@@ -39,7 +39,9 @@ var script = []exchange{
 	{`{"version":1,"kind":"event","event":"4:ping","data":7,"traceparent":"` + trace + `"}`, 1},
 	{`{"version":1,"kind":"request","id":"c:6","method":"4:meta","params":null,"meta":{"tenant":"t1","b":"2"}}`, 1},
 	{`{"version":1,"kind":"request","id":"c:7","method":"7:reverse","params":null,"traceparent":"` + trace + `"}`, 2},
-	{`{"version":1,"kind":"request","id":"c:9","method":"4:wait","params":null}`, 0},
+	// The cancellation follows the handler's "waiting" event, so it always
+	// reaches a running handler and the answer does not depend on timing.
+	{`{"version":1,"kind":"request","id":"c:9","method":"4:wait","params":null}`, 1},
 	{`{"version":1,"kind":"cancel","id":"c:9"}`, 1},
 	{`{"version":1,"kind":"request","id":"c:10","method":"echo","params":1}`, 1},
 	{`{"version":1,"kind":"request","id":"c:11","method":"3:big","params":{"n":5}}`, 1},

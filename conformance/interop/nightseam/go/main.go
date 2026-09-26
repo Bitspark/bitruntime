@@ -67,6 +67,9 @@ func serve(port string) error {
 					return nil, &runtime.PublicError{Code: "bad_request", Message: "refused on purpose", Data: json.RawMessage(`{"n":1}`)}
 				}),
 				handle([]string{"wait"}, func(ctx context.Context, raw json.RawMessage) (any, error) {
+					if err := runtime.EmitWire(ctx, peer.Wire(), []string{"waiting"}, nil); err != nil {
+						return nil, err
+					}
 					<-ctx.Done()
 					mu.Lock()
 					select {

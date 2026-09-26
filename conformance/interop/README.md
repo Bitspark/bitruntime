@@ -33,7 +33,7 @@ The server serves, at its connection's root:
 | `["spaces", "a/b", "echo"]` | request | returns `{"space": "a/b", "params": params}` |
 | `["spaces", "é", ""]` | request | returns `"unicode-empty"` |
 | `["fail"]` | request | refuses with public error `bad_request`, `refused on purpose`, data `{"n": 1}` |
-| `["wait"]` | request | waits until cancelled, then records the cancellation |
+| `["wait"]` | request | emits event `["waiting"]`, waits until cancelled, then records the cancellation |
 | `["cancelled"]` | request | returns whether a `wait` was cancelled, waiting up to 2 s |
 | `["meta"]` | request | returns the meta its request carried, `{}` for none |
 | `["reverse"]` | request | calls the client's `["whoami"]` over the same connection and returns its result |

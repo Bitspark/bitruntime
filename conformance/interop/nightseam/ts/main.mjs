@@ -25,6 +25,7 @@ function serve(port) {
           throw new DuplexError('bad_request', 'refused on purpose', {n: 1});
         });
         handleWire(d, ['wait'], (_params, context) => new Promise((_resolve, reject) => {
+          emitWire(peer.wire(), ['waiting'], null, {context});
           context.signal.addEventListener('abort', () => {
             sawCancel = true;
             for (const wake of waiting) wake(true);
