@@ -270,18 +270,22 @@ func (p *Peer) end(err error, code transports.Code, reason string) {
 		p.mu.Lock()
 		p.err = err
 		p.mu.Unlock()
-		p.cancel()
 		close(p.done)
+		// The connection is closed before the peer's context is cancelled. The
+		// reader receives under that context, and a WebSocket whose pending read
+		// is cancelled drops the socket, so the far side would observe 1006
+		// instead of the code chosen here.
 		if code == codeAborted || !transports.Sendable(code) {
 			_ = p.conn.Abort()
 		} else {
-			// The peer's own context is already cancelled, so the handshake
-			// waits on one of its own: a far side that answers is told the
-			// code, and one that does not holds nothing up past the deadline.
+			// The handshake waits on a context of its own: a far side that
+			// answers is told the code, and one that does not holds nothing up
+			// past the deadline.
 			ctx, cancel := context.WithTimeout(context.Background(), p.options.WriteTimeout)
 			_ = p.conn.Close(ctx, code, closeReason(reason))
 			cancel()
 		}
+		p.cancel()
 	})
 }
 
@@ -371,6 +375,15 @@ func (p *Peer) beginCall(ctx context.Context, method string, params json.RawMess
 	return &admittedCall{await: func(result any) error {
 		defer finish()
 		cancelRemote, err := request.Await(ctx, reply, p.done, p.Err, result)
+		if cancelRemote {
+			// The call's context derives from the peer's, which ends with the
+			// peer: a call cut off by the peer ending is disconnected, not
+			// withdrawn, and owes the far side no cancellation.
+			if ended := p.Err(); ended != nil {
+				complete(false)
+				return ended
+			}
+		}
 		complete(cancelRemote)
 		return err
 	}, withdraw: func() {

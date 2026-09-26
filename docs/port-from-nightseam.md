@@ -67,6 +67,12 @@ None changes a `bitwire/1` frame.
   (`core.ErrBackpressure`, a remote `CloseError`, a context error). A forwarded
   request whose destination closed or overflowed is answered `disconnected`,
   not `internal`.
+- **A peer's end is disconnected, and its close code arrives.** A call through
+  the root that the peer's end cuts off is answered `disconnected`; v0.6.0
+  answered `cancelled`, because the call's context derives from the peer's.
+  The peer closes its connection before cancelling its context, so a WebSocket
+  peer ended from another goroutine transmits the code it chose; v0.6.0's
+  order let the far side observe 1006 instead.
 - **Observe-only close codes (R27).** `transports.Sendable` separates codes that
   may be sent from 1005, 1006 and 1015. Transports refuse the latter with
   `ErrUnsendableCode`; a peer asked to close with one aborts instead.

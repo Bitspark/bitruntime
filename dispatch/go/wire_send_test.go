@@ -222,14 +222,10 @@ func TestOutputCancellationProofBelongsOnlyToTheUnadmittedCall(t *testing.T) {
 	if !errors.Is(destination.Err(), core.ErrBackpressure) {
 		t.Fatalf("full carrier ended with %v", destination.Err())
 	}
+	// A call the peer's end cut off is disconnected, not withdrawn, although
+	// its context derives from the peer's. Nightseam v0.6.0's root answered
+	// cancelled here.
 	var public *core.PublicError
-	if errors.As(earlier, &public) && public.Code == "cancelled" {
-		// The root hands an admitted request to the peer under a context
-		// derived from the peer's own, which the peer's end cancels before it
-		// releases the waiter; the waiter can then read its end as a
-		// withdrawal. Nightseam v0.6.0's root did the same.
-		t.Skip("engine/go: a root call the peer's end settles is answered cancelled, not disconnected")
-	}
 	if !errors.As(earlier, &public) || public.Code != "disconnected" {
 		t.Fatalf("earlier call = %v", earlier)
 	}
