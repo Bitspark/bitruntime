@@ -3,16 +3,24 @@
 The Go and TypeScript implementation of the
 [Bitwire](https://github.com/Bitspark/bitwire) contract.
 
-**Status: structural core 0.1.0 implemented.** It provides
-full generic tree construction and selection, decomposition/reconstruction,
-derived sending and an explicit addressed-access adapter. See
-[Go](core/go/README.md) and [TypeScript](core/ts/README.md).
+**Status: the runtime path hand-written adapters use is implemented** (the next
+release after the structural core 0.1.0):
 
-Transports, carriers, the protocol engine, invocation lifecycle, dispatch,
-live references and tunnels remain planned under
+- **core:** full tree construction, selection, decomposition and derived
+  sending; the addressed operators `At`, `Mount` and `Forward`; the local pair;
+  the invocation lifecycle.
+- **transports:** the frame transport seam, the in-memory pipe and WebSocket.
+- **engine:** the `bitwire/1` protocol engine and WebSocket connection setup.
+- **dispatch:** the dispatcher and the `Call`, `Emit`, `Handle` and `Register`
+  helpers.
+
+The runtime is ported from Nightseam v0.6.0 with its provenance in `NOTICE`, and
+fixes Nightseam's recorded defects in this path; see
+[the port record](docs/port-from-nightseam.md). The engine interoperates with
+Nightseam v0.6.0 peers in both roles and both languages and sends the same
+bytes (`node scripts/interop.mjs`). Live references, tunnels, the framed byte
+stream, telemetry and authentication integration remain planned under
 [Bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
-Consumer networking still uses frozen Nightseam v0.6.0 until that migration is
-delivered; the structural core is not a replacement carrier runtime.
 
 ## Where it sits
 
@@ -68,11 +76,24 @@ and message/return-capability identity.
 
 ## Packages
 
-Go uses module `github.com/Bitspark/bitruntime` and package `core/go`.
-TypeScript uses `@bitspark/bitruntime-core` from `core/ts`. Both depend on the
-public Bitwire 0.3.0 contract. The initial release process publishes a root Go
-tag and a TypeScript tarball with checksums on GitHub; npm registry publication
-is not configured. Read [RELEASING.md](RELEASING.md) for validation and delivery.
+Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
+
+| Package | Holds |
+| --- | --- |
+| `core/go` | Trees, `At`, `Mount`, `Forward`, `NewPair`, the invocation lifecycle, `Respond`, `PublicError` |
+| `transports/go` | The seam, `Pipe`, close codes and `Sendable`, the closed classification `ErrClosed` |
+| `transports/websocket/go` | The WebSocket transport |
+| `engine/go` | The `bitwire/1` `Peer` over any transport |
+| `engine/websocket/go` | `Accept`, `NewHandler` and `Dial` over WebSockets |
+| `dispatch/go` | `NewDispatcher`, `Call`, `Emit`, `Handle`, `Register` |
+
+A program links only the packages it imports; `coder/websocket` and `net/http`
+enter only through the WebSocket packages. TypeScript uses one package,
+`@bitspark/bitruntime`, with the subpaths `./core`, `./transports`, `./engine`
+and `./dispatch`, so the received context its components share stays private
+to the package. Both depend on the public Bitwire 0.3.0 contract. Releases
+publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
+registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 
 The generic core uses Bitwire's native node declarations. TypeScript accepts
 Bitstore's matching structural node type directly; Go requires an explicit

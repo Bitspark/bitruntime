@@ -57,13 +57,19 @@ Each release states:
 - which protocol revisions it implements (`bitwire/1`, …);
 - which conformance suite revision it passes.
 
-Modules are versioned independently. The first structural-core milestone uses
-one root Go module, `github.com/Bitspark/bitruntime`, with package `core/go`, and
-one TypeScript package, `@bitspark/bitruntime-core`, in `core/ts`. The initial
-root `v0.1.0` tag versions these two implementations together. Future components
-need their module boundaries recorded before joining this release unit or
-publishing separately. Before 1.0 there is no compatibility promise. There are
-no aliases or re-exports of Nightseam.
+Modules are versioned independently. The runtime path's components — core,
+transports, engine and dispatch — form one release unit: one root Go module,
+`github.com/Bitspark/bitruntime`, whose packages are `core/go`,
+`transports/go`, `transports/websocket/go`, `engine/go`, `engine/websocket/go`
+and `dispatch/go`, and one TypeScript package, `@bitspark/bitruntime`, with a
+subpath per component. Root tags version them together; `v0.1.0` released the
+structural core alone as `@bitspark/bitruntime-core`. They move together because
+the engine and the pair create the invocations and received context that
+dispatch reads, which the TypeScript package keeps private to itself. Later
+components (live references, tunnels, telemetry, authentication integration)
+record their module boundaries before joining this unit or publishing
+separately. Before 1.0 there is no compatibility promise. There are no aliases
+or re-exports of Nightseam.
 
 The initial release process publishes Go through its source tag and TypeScript
 as a GitHub release tarball with checksums. Registry publication is separately
@@ -76,7 +82,10 @@ configured and cannot be inferred from the presence of a tarball. See
   module in Bitwire.
 - The initial core runs its actual implementations against Bitwire's independent
   structural oracle as well as native edge cases. These observations do not
-  stand in for the still-pending carrier/runtime suites.
+  stand in for the carrier/runtime suites, which Bitwire runs from its own
+  test-only module.
+- Nightseam v0.6.0's `bitwire/1` tables, vendored byte for byte in
+  `vectors/bitwire-1`, and the byte-level transcripts of `scripts/interop.mjs`.
 - The portable byte vectors for `bitwire-stream/1`.
 - Interoperability runs against Nightseam v0.6.0 peers, until the last consumer
   moves.
