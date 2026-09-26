@@ -28,6 +28,7 @@ jobs:
       - run: go test -race -count=1 ./...
       - run: npm ci --ignore-scripts && npm run check && npm run build && npm test
       - run: node scripts/package-smoke.mjs
+      - run: node scripts/interop.mjs
       - run: node scripts/go-smoke.mjs "$GITHUB_REF_NAME"
       - name: Pack release
         run: |
