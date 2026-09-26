@@ -20,3 +20,12 @@ declaration. Data reading and storage remain Bitstore's responsibility.
 Go is available through the `v0.1.0` module tag. The TypeScript package is
 published as a GitHub release tarball with a SHA-256 checksum; it is not yet
 published to an npm registry.
+
+## Unreleased: one TypeScript package
+
+The next TypeScript version, 0.2.0, is one package, `@bitspark/bitruntime`,
+built from the repository root. It replaces `@bitspark/bitruntime-core` and
+exports four subpaths: `@bitspark/bitruntime/core` (the structural core, the
+addressed operators, the local pair and the invocation lifecycle),
+`/transports`, `/engine` (the `bitwire/1` peer) and `/dispatch`. It is not
+released yet.

@@ -23,17 +23,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: core/ts/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Go formatting
         run: test -z "$(gofmt -l core/go)"
       - run: go vet ./...
       - run: go test -race -count=1 ./...
       - run: npm ci --ignore-scripts
-        working-directory: core/ts
       - run: npm run check
-        working-directory: core/ts
       - run: npm run build
-        working-directory: core/ts
       - run: npm test
-        working-directory: core/ts
       - run: node scripts/package-smoke.mjs

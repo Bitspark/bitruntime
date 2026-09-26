@@ -89,9 +89,10 @@ Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
 
 A program links only the packages it imports; `coder/websocket` and `net/http`
 enter only through the WebSocket packages. TypeScript uses one package,
-`@bitspark/bitruntime`, with the subpaths `./core`, `./transports`, `./engine`
-and `./dispatch`, so the received context its components share stays private
-to the package. Both depend on the public Bitwire 0.3.0 contract. Releases
+`@bitspark/bitruntime`, built at the repository root with the subpaths
+`./core`, `./transports`, `./engine` and `./dispatch`, so the received context
+its components share stays private to the package. (v0.1.0 shipped the
+structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public Bitwire 0.3.0 contract. Releases
 publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
 registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 

@@ -49,6 +49,26 @@ tables, byte for byte.
 | `runtime.Accept`, `NewHandler`, `Dial`, `ServerOptions`, `DialOptions` | `websocket.Accept`, `NewHandler`, `Dial`, … (`engine/websocket/go`) |
 | `peer.Wire()` | `peer.Wire()`, an `Endpoint` over `bitwire.AddressedWire` |
 
+## TypeScript names
+
+One package, `@bitspark/bitruntime`, exports the subpaths `/core`,
+`/transports`, `/engine` and `/dispatch`. The received-context machinery,
+frame validation, the envelope codec, path encoding and the Unicode guard live
+in `core/ts/src/internal` and no subpath exports them.
+
+| v0.6.0 | bitruntime |
+| --- | --- |
+| `@nightseam/duplex` `Frame`, `FrameConnection`, `pipe`, `webSocketConnection`, `NO_STATUS` | `/transports`, with the close-code constants and `sendable` |
+| `@nightseam/duplex` `at`, `mount`; `forwardWire` | `/core` `at`, `mount`, `forward` |
+| `WireError` `'no_route'`, `'invalid_path'`, `'receiver_exists'` | `MissingPathError`, `InvalidPathError`, `ReceiverExistsError` |
+| `WireError` `'closed'`, `DuplexError` `'disconnected'` | `PublicError` `'disconnected'`, the one closed classification |
+| `DuplexError`, `UnpublishedError` | `PublicError`, `UnpublishedError` (`/core`) |
+| `wirePair(PeerOptions)` | `pair(PairOptions)` |
+| `response` | `respond` |
+| `callWire`, `emitWire`, `handleWire`, `registerWire`, `onWireEvent` | `call`, `emit`, `handle`, `register`, `onEvent` (`/dispatch`) |
+| `WireDispatcher`, `HandlerRegistry`, `WireRequestContext`, `WireEventContext` | `Dispatcher`, `Registry`, `RequestContext`, `EventContext` |
+| `DuplexPeer`, `DUPLEX_DEFAULTS`, `DUPLEX_PROFILE` | `Peer`, `PEER_DEFAULTS`, `PROTOCOL` (`'bitwire/1'`) (`/engine`) |
+
 ## Behavior that changed
 
 Each change is a recorded defect or research verdict, fixed rather than ported.
@@ -97,6 +117,20 @@ None changes a `bitwire/1` frame.
   without that handler answers. Observer hooks and family labels are removed
   until the engine's observation hooks are designed with Bitwire's
   received-context revision (charter §1).
+- **TypeScript.** The one closed classification is `PublicError` with code
+  `disconnected`, keeping what ended the carrier as its `cause`: a send on a
+  closed mount, dispatcher or pair, a call pending when its peer ends (its
+  `onClose` listeners still receive the reason itself), and a send that
+  overflows a queue and so ends its carrier. A connection's `close` throws a
+  `RangeError` for a code `sendable` refuses; a `FrameConnection` has no
+  abort, so a peer asked to close with such a code closes normally instead.
+  A handler's or a listener's context no longer reaches the carrier that
+  delivered it — the peer (`context.peer`) or a pair's endpoint (R19/R23).
+  Since every request now takes the root, the root forwards the trace members
+  a request's frame arrived with rather than what a propagator placed on the
+  handler's context, and local structured frames omit an empty trace member,
+  as the peer's own frames always did; v0.6.0's root refused its own response
+  to a request that carried a `tracestate` alone.
 
 ## Kept as v0.6.0 behaved
 
