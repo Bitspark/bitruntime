@@ -34,5 +34,12 @@ bitruntime  →  Bitwire (the contract, the protocol and carrier specifications,
 
 - [Charter](CHARTER.md): what this repository owns, promises and is checked by.
 - [Working here as an agent](AGENTS.md).
+- [Repository layout](LAYOUT.md) and the
+  [interactive kickoff for the bitsystem3 migration](docs/bitsystem3-migration-kickoff.md).
 - [Bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
   and [the contract](https://github.com/Bitspark/bitwire/blob/main/docs/wire/contract.md).
+
+## Source layout
+
+Read [LAYOUT.md](LAYOUT.md) for the component-first, two-letter language
+directory convention and this repository's adoption notes.

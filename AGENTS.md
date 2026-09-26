@@ -23,3 +23,11 @@ before changing this tree.
   Squash a green change onto `main`.
 - Do not add private checkout dependencies, local orchestration state or
   credentials.
+
+## Repository layout
+
+Use component-first source paths with two-letter language directories:
+`<component>/<lang>/` and `cmd/<command>/<lang>/`. Read [LAYOUT.md](LAYOUT.md)
+for the shared codes, current paths and migration boundaries. Apply it to new
+components and ports; an existing path moves only with its imports, manifests,
+tests and tooling. Preserve the repository's ownership and release rules.
