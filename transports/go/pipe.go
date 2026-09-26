@@ -92,7 +92,7 @@ func (e *pipeEnd) Receive(ctx context.Context) (Frame, error) {
 			// The receiver refuses with 1009, as a WebSocket closes on its read
 			// limit, so the sender observes why rather than an abort.
 			e.end(&CloseError{Code: CodeTooLarge, Reason: "frame exceeds the receive limit"})
-			return Frame{}, fmt.Errorf("transport frame of %d bytes exceeds the receive limit of %d", len(frame.Data), e.limit)
+			return Frame{}, fmt.Errorf("%w: transport frame of %d bytes exceeds the receive limit of %d", ErrClosed, len(frame.Data), e.limit)
 		}
 		return frame, nil
 	}

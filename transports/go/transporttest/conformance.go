@@ -151,6 +151,8 @@ func Run(t *testing.T, connect Connect) {
 		}()
 		if frame, err := b.Receive(ctx); err == nil {
 			t.Fatalf("a frame of %d bytes was delivered over a limit of 1024", len(frame.Data))
+		} else if !errors.Is(err, transports.ErrClosed) {
+			t.Fatalf("refusing a frame over the limit is not a closed carrier: %v", err)
 		}
 		if _, err := b.Receive(ctx); err == nil {
 			t.Fatal("the connection received again after refusing a frame over the limit")

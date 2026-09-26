@@ -62,7 +62,7 @@ func (w *rootWire) Send(path []string, message wire.Message) error {
 	message.Frame.Meta = maps.Clone(message.Frame.Meta)
 	name, err := profile.EncodePath(path)
 	if err != nil {
-		return core.Unpublished(err)
+		return core.Unpublished(core.ErrInvalidPath)
 	}
 	if name == "" && (message.Frame.Kind == wire.ProfileRequest || message.Frame.Kind == wire.ProfileEvent) {
 		return core.Unpublished(errors.New("bitruntime: a root operation needs a nonempty path"))

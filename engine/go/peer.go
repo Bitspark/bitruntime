@@ -179,13 +179,15 @@ func NewPeer(ctx context.Context, conn transports.Conn, role Role, options Optio
 		p.prefix, p.remotePrefix = "s:", "c:"
 	}
 	p.root = &rootWire{peer: p, wake: make(chan struct{}, 1), incoming: map[returnKey]*routedCall{}}
+	// The root runs before Prepare, so what Prepare attaches or sends through
+	// it is released and answered even when Prepare fails.
+	go p.root.run()
 	if o.Prepare != nil {
 		if err := o.Prepare(p); err != nil {
 			p.abandon(err)
 			return nil, err
 		}
 	}
-	go p.root.run()
 	go p.readLoop()
 	go p.writeLoop()
 	go p.eventLoop()
@@ -333,7 +335,7 @@ func (p *Peer) beginCall(ctx context.Context, method string, params json.RawMess
 		p.publish.Unlock()
 		cancel()
 		p.fail(errors.New("bitruntime: request serials exhausted"))
-		return nil, core.Unpublished(&core.PublicError{Code: "identifier_exhausted", Message: "Create a new peer before issuing further calls"})
+		return nil, core.Unpublished(core.Ended(&core.PublicError{Code: "identifier_exhausted", Message: "Create a new peer before issuing further calls"}))
 	}
 	p.next++
 	id := p.prefix + strconv.FormatUint(p.next, 10)
@@ -375,14 +377,14 @@ func (p *Peer) beginCall(ctx context.Context, method string, params json.RawMess
 	return &admittedCall{await: func(result any) error {
 		defer finish()
 		cancelRemote, err := request.Await(ctx, reply, p.done, p.Err, result)
-		if cancelRemote {
+		if cancelRemote && p.ctx.Err() != nil {
 			// The call's context derives from the peer's, which ends with the
-			// peer: a call cut off by the peer ending is disconnected, not
-			// withdrawn, and owes the far side no cancellation.
-			if ended := p.Err(); ended != nil {
-				complete(false)
-				return ended
-			}
+			// peer, including when the context the peer was made with ends: a
+			// call cut off that way is disconnected, not withdrawn, and owes
+			// the far side no cancellation.
+			<-p.done
+			complete(false)
+			return p.Err()
 		}
 		complete(cancelRemote)
 		return err

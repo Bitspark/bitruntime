@@ -98,7 +98,7 @@ func Accept(w http.ResponseWriter, r *http.Request, options ServerOptions) (*eng
 func refuseConnection(conn transports.Conn, timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	_ = conn.Close(ctx, transports.CodePolicyViolation, "the connection was refused before the protocol began")
+	_ = conn.Close(ctx, transports.CodePolicyViolation, "the connection was refused before the profile began")
 }
 
 // NewHandler serves bitwire/1 at an HTTP endpoint: each request that passes

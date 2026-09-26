@@ -134,6 +134,13 @@ None changes a `bitwire/1` frame.
 
 ## Kept as v0.6.0 behaved
 
+- A peer that refuses a malformed frame closes with 4011 and the decoder's
+  error as the reason, as v0.6.0's Go peer does, with the same decoding type
+  names. One form differs: a non-object `error` member names
+  `profile.PublicError` where v0.6.0 named `runtime.PublicError`. Reasons are
+  diagnostics rather than protocol; v0.6.0's Go and TypeScript peers send
+  different ones, and the bitwire/1 tables judge only the code.
+
 - A request refused at the root's pending bound is answered through its return
   capability, so its caller gets `busy` without proof that nothing was
   published; v0.6.0's removed `Peer.Call` refused it synchronously. Whether a

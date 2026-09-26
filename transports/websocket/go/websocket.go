@@ -73,6 +73,12 @@ func (c *connection) Send(ctx context.Context, frame transports.Frame) error {
 		return err
 	}
 	if err := c.conn.Write(ctx, t, frame.Data); err != nil {
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			// The library closes a connection whose write outlived its
+			// context, so the carrier is closed as well as late.
+			c.end()
+			return fmt.Errorf("%w: %w", transports.ErrClosed, ctx.Err())
+		}
 		return c.translate(ctx, err)
 	}
 	return nil
@@ -91,14 +97,14 @@ func (c *connection) Receive(ctx context.Context) (transports.Frame, error) {
 			// 1009 if it read it first, or the dropped transport otherwise.
 			c.end()
 			_ = c.conn.CloseNow()
-			return transports.Frame{}, err
+			return transports.Frame{}, fmt.Errorf("%w: %w", transports.ErrClosed, err)
 		}
 		return transports.Frame{}, c.translate(ctx, err)
 	}
 	kind, err := kindOf(t)
 	if err != nil {
 		_ = c.Abort()
-		return transports.Frame{}, err
+		return transports.Frame{}, fmt.Errorf("%w: %w", transports.ErrClosed, err)
 	}
 	return transports.Frame{Kind: kind, Data: data}, nil
 }

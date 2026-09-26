@@ -64,17 +64,19 @@ func Respond(request wire.Message, result json.RawMessage, err error) error {
 		switch {
 		case errors.As(err, &public) && public != nil && public.Code != "" && public.Message != "":
 			f.Error = &wire.ProfileError{Code: public.Code, Message: public.Message, Data: public.Data}
+		case errors.Is(err, transports.ErrClosed):
+			// Before cancellation: a carrier that ended because its context did
+			// is closed, whatever its cause.
+			f.Error = &wire.ProfileError{Code: "disconnected", Message: "Connection ended; outcome may be unknown"}
 		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 			f.Error = &wire.ProfileError{Code: "cancelled", Message: "Request cancelled"}
-		case errors.Is(err, transports.ErrClosed):
-			f.Error = &wire.ProfileError{Code: "disconnected", Message: "Connection ended; outcome may be unknown"}
 		default:
 			f.Error = &wire.ProfileError{Code: "internal", Message: "Internal error"}
 		}
 		f.Result = nil
 		// Preserve the local cancellation cause, but otherwise observe exactly
 		// the normalized public error selected for this response.
-		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if f.Error.Code != "cancelled" {
 			err = &PublicError{Code: f.Error.Code, Message: f.Error.Message, Data: f.Error.Data}
 		}
 	}

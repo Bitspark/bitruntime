@@ -150,7 +150,7 @@ func (w *localEnd) Send(path []string, message wire.Message) error {
 	message.Frame.Meta = maps.Clone(message.Frame.Meta)
 	name, err := profile.EncodePath(path)
 	if err != nil {
-		return Unpublished(err)
+		return Unpublished(ErrInvalidPath)
 	}
 	if err := profile.Validate(name, message.Frame, w.pair.options.MaxFrameBytes); err != nil {
 		return Unpublished(err)

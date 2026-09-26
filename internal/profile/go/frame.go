@@ -105,9 +105,45 @@ func ValidPath(path []string) bool {
 	return true
 }
 
+// frame and PublicError are what Decode reads an envelope into. Their names
+// are v0.6.0's, because a decoder's error names the type it failed to fill,
+// and a peer sends that error as the reason it refuses the frame.
+type frame struct {
+	Version     int               `json:"version"`
+	Kind        string            `json:"kind"`
+	ID          string            `json:"id,omitempty"`
+	Method      string            `json:"method,omitempty"`
+	Params      json.RawMessage   `json:"params,omitempty"`
+	Result      json.RawMessage   `json:"result,omitempty"`
+	Error       *PublicError      `json:"error,omitempty"`
+	Event       string            `json:"event,omitempty"`
+	Data        json.RawMessage   `json:"data,omitempty"`
+	Traceparent string            `json:"traceparent,omitempty"`
+	Tracestate  string            `json:"tracestate,omitempty"`
+	Meta        map[string]string `json:"meta,omitempty"`
+}
+
+// PublicError is a decoded envelope's public error.
+type PublicError struct {
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
 // Decode admits one envelope exactly as the profile allows it.
 func Decode(data []byte) (Frame, error) {
-	var f Frame
+	decoded, err := decode(data)
+	f := Frame{Version: decoded.Version, Kind: decoded.Kind, ID: decoded.ID, Method: decoded.Method,
+		Params: decoded.Params, Result: decoded.Result, Event: decoded.Event, Data: decoded.Data,
+		Traceparent: decoded.Traceparent, Tracestate: decoded.Tracestate, Meta: decoded.Meta}
+	if decoded.Error != nil {
+		f.Error = &wire.ProfileError{Code: decoded.Error.Code, Message: decoded.Error.Message, Data: decoded.Error.Data}
+	}
+	return f, err
+}
+
+func decode(data []byte) (frame, error) {
+	var f frame
 	if err := RawUnicode(data); err != nil {
 		return f, err
 	}
