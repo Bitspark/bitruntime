@@ -40,6 +40,6 @@ func main() {
   fmt.Println("Fresh public Go module consumer passed.")
 }
 `);
-run(['get', `github.com/Bitspark/bitruntime@${revision}`]);
+run(['get', `github.com/Bitspark/bitruntime/core/go@${revision}`]);
 run(['run', '.']);
 console.log(`Installed public Go module at ${revision} in ${temp}`);
