@@ -1,78 +1,16 @@
-import type { Endpoint, Path, Receiver, Wire } from '@bitspark/bitwire';
+import type { AddressedWire, Endpoint, Path, Receiver } from '@bitspark/bitwire';
+import { MissingPathError, ReceiverExistsError } from './error.ts';
+import { ended } from './internal/frame.ts';
+import { encodePath } from './internal/path.ts';
 
-// The public Nightseam names present the shared contract's actual declarations.
-export type {
-  Path,
-  ProfileKind,
-  ProfileFrame,
-  ProfileError,
-  ReturnAddress,
-  Message,
-  Receiver,
-  Wire,
-  Endpoint,
-} from '@bitspark/bitwire';
-
-export class WireError extends Error {
-  readonly code: 'closed' | 'no_route' | 'receiver_exists' | 'invalid_path';
-  constructor(code: WireError['code']) {
-    super(`Wire ${code}.`);
-    this.name = 'WireError';
-    this.code = code;
-  }
-}
-
-function scalar(value: string): void {
-  for (let i = 0; i < value.length; i++) {
-    const unit = value.charCodeAt(i);
-    if (unit >= 0xd800 && unit <= 0xdbff) {
-      const low = value.charCodeAt(++i);
-      if (!(low >= 0xdc00 && low <= 0xdfff)) throw new WireError('invalid_path');
-    } else if (unit >= 0xdc00 && unit <= 0xdfff) throw new WireError('invalid_path');
-  }
-}
-
-/** UTF-8 byte-length-prefixed segments; [] is '', whereas [''] is '0:'. */
-export function encodePath(path: Path): string {
-  const encoder = new TextEncoder();
-  return path
-    .map((segment) => {
-      scalar(segment);
-      return `${encoder.encode(segment).length}:${segment}`;
-    })
-    .join('');
-}
-/** Accepts only the canonical encoding, retaining dots, empty strings and BOMs. */
-export function decodePath(encoded: string): string[] {
-  scalar(encoded);
-  const bytes = new TextEncoder().encode(encoded);
-  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-  const path: string[] = [];
-  for (let offset = 0; offset < bytes.length;) {
-    const start = offset;
-    let length = 0;
-    while (offset < bytes.length && bytes[offset] !== 58) {
-      const digit = bytes[offset++]! - 48;
-      if (digit < 0 || digit > 9) throw new WireError('invalid_path');
-      length = length * 10 + digit;
-      if (!Number.isSafeInteger(length)) throw new WireError('invalid_path');
-    }
-    if (offset === start || offset === bytes.length || (offset - start > 1 && bytes[start] === 48))
-      throw new WireError('invalid_path');
-    offset++;
-    if (length > bytes.length - offset) throw new WireError('invalid_path');
-    try {
-      path.push(decoder.decode(bytes.subarray(offset, offset + length)));
-    } catch {
-      throw new WireError('invalid_path');
-    }
-    offset += length;
-  }
-  return path;
-}
-
-/** Selects send access without granting receive attachment or closure authority. */
-export function at(root: Wire, path: Path): Wire {
+/**
+ * Binds a relative path prefix to addressed access without allocating a peer,
+ * channel or queue: at(w, []) ≃ w and at(at(w, a), b) ≃ at(w, a ++ b). The
+ * result grants only send access, even when path is empty. This is addressed
+ * prefix binding, not structural selection: whether the root admits what is
+ * sent through it is the root's to decide.
+ */
+export function at(root: AddressedWire, path: Path): AddressedWire {
   const prefix = [...path];
   return {
     send: (suffix, message) => root.send([...prefix, ...suffix], message),
@@ -92,16 +30,20 @@ interface Attachment {
  * Consumes one path segment; [] has no leaf, and [''] can select an empty key.
  * One owning receiver spans the borrowed children and sees their keys restored.
  * Copies the map. Closing detaches this mount's attachment, never children.
+ * A path that selects no child is refused with MissingPathError, an invalid
+ * segment with InvalidPathError, a second receiver with ReceiverExistsError,
+ * and anything after close as `disconnected`.
  */
 export function mount(children: ReadonlyMap<string, Endpoint>): Endpoint {
   const routes = new Map(children);
   let attachment: Attachment | undefined;
   let closed = false;
   const destination = (path: Path): Endpoint => {
-    if (closed) throw new WireError('closed');
+    if (closed) throw ended();
     encodePath(path);
-    const child = path.length ? routes.get(path[0]!) : undefined;
-    if (!child) throw new WireError('no_route');
+    if (!path.length) throw new MissingPathError();
+    const child = routes.get(path[0]!);
+    if (!child) throw new MissingPathError();
     return child;
   };
   const release = (child: ChildAttachment): void => {
@@ -118,8 +60,8 @@ export function mount(children: ReadonlyMap<string, Endpoint>): Endpoint {
     if (ending) held.receiver.closed?.(ending.code, ending.reason);
   };
   const receive = (receiver: Receiver): (() => void) => {
-    if (closed) throw new WireError('closed');
-    if (attachment) throw new WireError('receiver_exists');
+    if (closed) throw ended();
+    if (attachment) throw new ReceiverExistsError();
     const held: Attachment = { receiver, active: true, children: [] };
     attachment = held;
     let remaining = routes.size;
@@ -142,7 +84,7 @@ export function mount(children: ReadonlyMap<string, Endpoint>): Endpoint {
         // Its returned disposer still belongs to this acquisition attempt.
         if (!held.active || !slot.active) {
           detach();
-          throw new WireError('closed');
+          throw ended();
         }
         slot.detach = detach;
       }

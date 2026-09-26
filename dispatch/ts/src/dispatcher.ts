@@ -1,11 +1,16 @@
-import { encodePath, WireError } from '@nightseam/duplex';
-import type { Endpoint, Message, Path, Receiver, Wire } from '@nightseam/duplex';
-import { DuplexError } from './error.ts';
-import { InvocationError, captureInvocation, relayInvocationControl } from './invocation.ts';
-import { response } from './wire.ts';
+import type { AddressedWire, Endpoint, Message, Path, Receiver } from '@bitspark/bitwire';
+import { PublicError, ReceiverExistsError } from '../../../core/ts/src/error.ts';
+import { InvocationError, captureInvocation, relayInvocationControl } from '../../../core/ts/src/invocation.ts';
+import { respond } from '../../../core/ts/src/respond.ts';
+import { ended as disconnected } from '../../../core/ts/src/internal/frame.ts';
+import { encodePath } from '../../../core/ts/src/internal/path.ts';
 
-/** Registration authority; close releases this registry, never its borrowed carrier. */
-export interface HandlerRegistry extends Wire {
+/**
+ * The registration capability the handler helpers need: send access plus
+ * explicit route registration. Closing it releases its registrations, never
+ * a borrowed carrier.
+ */
+export interface Registry extends AddressedWire {
   register(path: Path, receiver: Receiver): () => void;
   close(code?: number, reason?: string): void;
 }
@@ -28,7 +33,7 @@ export interface DispatcherOptions {
  * endpoint: the lifecycle travels with the unchanged return capability, and
  * nothing here recognizes a concrete type.
  */
-export class WireDispatcher implements HandlerRegistry {
+export class Dispatcher implements Registry {
   private readonly exact = new Map<string, Registration>();
   private readonly prefixes = new Map<string, Registration>();
   private ended = false;
@@ -45,24 +50,26 @@ export class WireDispatcher implements HandlerRegistry {
     });
     if (this.ended) {
       detach();
-      throw new WireError('closed');
+      throw disconnected();
     }
     this.detach = detach;
   }
   send(path: Path, message: Message): void {
-    if (this.ended) throw new WireError('closed');
+    if (this.ended) throw disconnected();
     this.root.send(path, message);
   }
+  /** Routes exactly path to receiver. A path has one registration. */
   register(path: Path, receiver: Receiver): () => void {
     return this.install(path, receiver, this.exact);
   }
+  /** Routes path and every path beneath it, the longest registered prefix winning, unless an exact registration matches. */
   registerPrefix(path: Path, receiver: Receiver): () => void {
     return this.install(path, receiver, this.prefixes);
   }
   private install(path: Path, receiver: Receiver, routes: Map<string, Registration>): () => void {
     const name = encodePath(path);
-    if (this.ended) throw new WireError('closed');
-    if (routes.has(name)) throw new WireError('receiver_exists');
+    if (this.ended) throw disconnected();
+    if (routes.has(name)) throw new ReceiverExistsError();
     const registration = { path: [...path], receiver };
     routes.set(name, registration);
     return () => {
@@ -99,7 +106,7 @@ export class WireDispatcher implements HandlerRegistry {
     const registration = this.ended ? undefined : this.match(path, name);
     if (!registration?.receiver.message) {
       if (message.frame.kind === 'request')
-        response(message, undefined, new DuplexError('method_not_found', 'Unknown method.'));
+        respond(message, undefined, new PublicError('method_not_found', 'Unknown method.'));
       return;
     }
     const delivered = [...path];
@@ -113,12 +120,12 @@ export class WireDispatcher implements HandlerRegistry {
       // A bound reached is a refusal to try again at; a capability that
       // carries no lifecycle is a request this dispatcher cannot route with
       // the guarantees it advertises.
-      response(
+      respond(
         message,
         undefined,
         error instanceof InvocationError && error.code === 'limit'
-          ? new DuplexError('busy', 'Invocation participation limit reached.')
-          : new DuplexError('invalid_message', 'Invocation requires the lifecycle its return capability carries.'),
+          ? new PublicError('busy', 'Invocation participation limit reached.')
+          : new PublicError('invalid_message', 'Invocation requires the lifecycle its return capability carries.'),
       );
       return;
     }
@@ -136,9 +143,11 @@ export class WireDispatcher implements HandlerRegistry {
     return pending.finally(() => capture.ready());
   }
 
+  /** A receiving view of this shared dispatcher at a prefix, with no closure authority over the root. */
   select(path: Path): SelectedEndpoint {
     return new SelectedEndpoint(this, [...path]);
   }
+  /** Releases the routes and the root attachment, and closes the root only when this dispatcher owns it. */
   close(code = 1000, reason = ''): void {
     if (this.ended) return;
     this.ended = true;
@@ -158,8 +167,9 @@ export class WireDispatcher implements HandlerRegistry {
     if (this.ownEndpoint) this.root.close(code, reason);
   }
 }
-export function createDispatcher(endpoint: Endpoint, options: DispatcherOptions = {}): WireDispatcher {
-  return new WireDispatcher(endpoint, options);
+/** Attaches a dispatcher to an endpoint, borrowed unless the options transfer its closure. */
+export function createDispatcher(endpoint: Endpoint, options: DispatcherOptions = {}): Dispatcher {
+  return new Dispatcher(endpoint, options);
 }
 
 interface Attachment {
@@ -170,9 +180,9 @@ interface Attachment {
 export class SelectedEndpoint implements Endpoint {
   private ended = false;
   private attachment: Attachment | undefined;
-  private readonly owner: WireDispatcher;
+  private readonly owner: Dispatcher;
   private readonly prefix: Path;
-  constructor(owner: WireDispatcher, prefix: Path) {
+  constructor(owner: Dispatcher, prefix: Path) {
     this.owner = owner;
     this.prefix = prefix;
   }
@@ -180,12 +190,12 @@ export class SelectedEndpoint implements Endpoint {
     return this.owner.select([...this.prefix, ...path]);
   }
   send(path: Path, message: Message): void {
-    if (this.ended) throw new WireError('closed');
+    if (this.ended) throw disconnected();
     this.owner.send([...this.prefix, ...path], message);
   }
   receive(receiver: Receiver): () => void {
-    if (this.ended) throw new WireError('closed');
-    if (this.attachment) throw new WireError('receiver_exists');
+    if (this.ended) throw disconnected();
+    if (this.attachment) throw new ReceiverExistsError();
     const attachment: Attachment = { receiver };
     this.attachment = attachment;
     try {
@@ -193,13 +203,13 @@ export class SelectedEndpoint implements Endpoint {
         message: (path, message) => {
           if (receiver.message) return receiver.message(path.slice(this.prefix.length), message);
           if (message.frame.kind === 'request')
-            response(message, undefined, new DuplexError('method_not_found', 'Unknown method.'));
+            respond(message, undefined, new PublicError('method_not_found', 'Unknown method.'));
         },
         closed: (code, reason) => this.remove(attachment, { code, reason }),
       });
       if (this.attachment !== attachment) {
         detach();
-        throw new WireError('closed');
+        throw disconnected();
       }
       attachment.detach = detach;
     } catch (error) {
@@ -214,6 +224,7 @@ export class SelectedEndpoint implements Endpoint {
     attachment.detach?.();
     if (ending) attachment.receiver.closed?.(ending.code, ending.reason);
   }
+  /** Ends the view's route; it never closes the shared root. */
   close(code = 1000, reason = ''): void {
     this.ended = true;
     if (this.attachment) this.remove(this.attachment, { code, reason });

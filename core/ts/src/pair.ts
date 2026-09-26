@@ -1,21 +1,46 @@
-import { encodePath, WireError } from '@nightseam/duplex';
-import type { Message, Path, Receiver, ReturnAddress, Wire, Endpoint } from '@nightseam/duplex';
+import type { AddressedWire, Endpoint, Message, Path, Receiver, ReturnAddress } from '@bitspark/bitwire';
+import { PublicError, ReceiverExistsError } from './error.ts';
 import { Invocation, defaultInvocationLimits } from './invocation.ts';
-import { DUPLEX_DEFAULTS, positiveInteger } from './peer.ts';
-import type { PeerOptions } from './peer.ts';
-import { DuplexError } from './error.ts';
-import { defaultPropagator, traceOf } from './trace.ts';
-import type { ObserverEvent } from './observer.ts';
 import {
-  profileFrame,
-  publicError,
-  response,
-  wireContext,
-  setWireContext,
-  wireEventContext,
-  withWireEventContext,
-} from './wire.ts';
-import type { WireDispatchContext, WireRequestContext, WireEventContext } from './wire.ts';
+  dispatchContext,
+  eventContext,
+  setDispatchContext,
+  withEventContext,
+  type DispatchContext,
+  type ReceivedEventContext,
+  type ReceivedRequestContext,
+} from './internal/context.ts';
+import { ended, profileFrame, publicError } from './internal/frame.ts';
+import { LIMIT_DEFAULTS, limits } from './internal/limits.ts';
+import { encodePath } from './internal/path.ts';
+import { traceOf } from './internal/trace.ts';
+import { respond } from './respond.ts';
+import { defaultPropagator, type Propagator } from './trace.ts';
+
+/**
+ * Bounds a local pair. Absent members take the defaults, which are the
+ * protocol engine's: 64 concurrent handlers and 128 pending requests and queued
+ * messages per direction, frames of at most 1 MiB, a 30-second request
+ * deadline and a 10-second stall deadline for event consumers.
+ */
+export interface PairOptions {
+  /** The requests a direction runs at once; the one past it is refused busy. */
+  maxConcurrentHandlers?: number;
+  /** The requests a direction holds admitted and unanswered; the one past it is refused busy. */
+  maxPendingRequests?: number;
+  /** The requests and events a direction holds queued. A full queue ends the pair. */
+  queueCapacity?: number;
+  /** The envelope each message would travel as. */
+  maxFrameBytes?: number;
+  /** Answers a request whose handler has not answered by then. */
+  requestTimeoutMs?: number;
+  /** How long an event consumer may take before the pair ends as stalled. */
+  writeTimeoutMs?: number;
+  /** Moves a trace between a frame and a handler's context. */
+  propagator?: Propagator;
+  /** Told why the pair failed, before it ends. */
+  onError?: (error: PublicError) => void;
+}
 
 interface Registration {
   receiver: Receiver;
@@ -26,7 +51,7 @@ interface LocalCall {
   path: Path;
   returning: ReturnAddress;
   invocation: Invocation;
-  source?: WireDispatchContext;
+  source?: DispatchContext;
   cleanup: () => void;
   controller: AbortController;
   registration?: Registration;
@@ -41,7 +66,7 @@ interface Delivery {
   path: Path;
   message: Message;
   call?: LocalCall;
-  refusal?: DuplexError;
+  refusal?: PublicError;
 }
 // One end of a bounded local pair: the Endpoint it presents, what it owes the
 // other end, and the state its own admission keeps.
@@ -59,37 +84,30 @@ interface PairEnd {
 }
 
 /**
- * A bounded local carrier. Sending on one endpoint delivers asynchronously to
- * receivers on the other. No Peer, transport connection, or request protocol
- * is constructed; the runtime's existing return capability carries responses.
+ * A bounded local carrier with two relative origins. Sending on either
+ * endpoint delivers asynchronously to the receiver on the other. It allocates
+ * no peer, serializes nothing, and preserves structured frames, the original
+ * return capability's identity and received context. Each admitted request
+ * gets a fresh return capability that carries its invocation lifecycle.
  */
-export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
-  const limits = { ...DUPLEX_DEFAULTS };
-  for (const key of Object.keys(DUPLEX_DEFAULTS) as (keyof typeof DUPLEX_DEFAULTS)[]) {
-    if (options[key] !== undefined) {
-      positiveInteger(options[key], key, true);
-      (limits as Record<string, number>)[key] = options[key]!;
-    }
-  }
+export function pair(options: PairOptions = {}): [Endpoint, Endpoint] {
+  const bounds = limits(LIMIT_DEFAULTS, options);
   const propagator = options.propagator ?? defaultPropagator;
   let closed = false;
   const ends: PairEnd[] = [];
-  const disconnected = () => new DuplexError('disconnected', 'Connection ended; outcome may be unknown.');
-  const observe = (event: ObserverEvent) => {
-    try {
-      options.observer?.observe(event);
-    } catch {
-      /* Observers own their failures. */
-    }
-  };
+  // Every request admitted and not yet answered is answered disconnected, and
+  // every refusal still queued is answered with the refusal it was admitted
+  // with, so no caller is left to its own deadline.
   const end = (code = 1000, reason = '') => {
     if (closed) return;
     closed = true;
     const receivers: Receiver[] = [],
-      requests: Message[] = [];
+      requests: Message[] = [],
+      refusals: Delivery[] = [];
     for (const endpoint of ends) {
       clearTimeout(endpoint.eventTimer);
       if (endpoint.attachment) receivers.push(endpoint.attachment.receiver);
+      for (const queued of endpoint.queue) if (queued.refusal) refusals.push(queued);
       for (const calls of endpoint.calls.values())
         for (const call of calls.values()) {
           clearTimeout(call.timer);
@@ -104,7 +122,6 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
       endpoint.calls.clear();
       endpoint.queue.length = endpoint.queued = endpoint.retained = endpoint.active = 0;
     }
-    observe({ type: 'connection.closed', at: new Date(), code, reason, local: true });
     queueMicrotask(() => {
       for (const receiver of receivers) {
         try {
@@ -113,10 +130,11 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
           /* Every receiver gets closure. */
         }
       }
-      for (const request of requests) response(request, undefined, disconnected());
+      for (const refused of refusals) respond(refused.message, undefined, refused.refusal);
+      for (const request of requests) respond(request, undefined, ended());
     });
   };
-  const fail = (error: DuplexError) => {
+  const fail = (error: PublicError) => {
     try {
       options.onError?.(error);
     } catch {
@@ -124,6 +142,9 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
     }
     end(4011, error.message);
   };
+  // Frees a call's pending slot once it is answered and no already queued
+  // cancellation still owns its reservation. It never removes a newer
+  // admission that reused the same return identity and identifier.
   const retire = (endpoint: PairEnd, call: LocalCall) => {
     if (!call.completed || call.cancelQueued) return;
     const calls = endpoint.calls.get(call.original.return!);
@@ -152,7 +173,7 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
     try {
       return registration.receiver.message!(path, message);
     } catch (error) {
-      if (message.frame.kind === 'request') response(message, undefined, publicError(error));
+      if (message.frame.kind === 'request') respond(message, undefined, publicError(error));
       else fail(publicError(error));
     }
   };
@@ -174,28 +195,21 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
         }
         endpoint.queued--;
         if (refusal) {
-          response(message, undefined, refusal);
+          respond(message, undefined, refusal);
           continue;
         }
         const registration = endpoint.attachment?.receiver.message ? endpoint.attachment : undefined;
         if (frame.kind === 'event') {
           if (registration) {
             let delivered = message;
-            if (!wireEventContext(message)) {
-              const context: WireEventContext = { wire: endpoint.wire };
+            if (!eventContext(message)) {
+              const context: ReceivedEventContext = {};
               propagator.extract(context, traceOf(frame));
-              delivered = withWireEventContext(message, context);
+              delivered = withEventContext(message, context);
             }
             endpoint.eventTimer = setTimeout(() => {
-              observe({
-                type: 'backpressure',
-                at: new Date(),
-                queued: endpoint.queued,
-                stalled: true,
-                deadlineMs: limits.writeTimeoutMs,
-              });
-              fail(new DuplexError('stalled_consumer', 'Local wire event handler deadline exceeded.'));
-            }, limits.writeTimeoutMs);
+              fail(new PublicError('stalled_consumer', 'Local wire event handler deadline exceeded.'));
+            }, bounds.writeTimeoutMs);
             try {
               await invoke(registration, path, delivered);
             } catch (error) {
@@ -208,11 +222,11 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
           continue;
         }
         if (frame.kind !== 'request') continue;
-        if (!registration || endpoint.active >= limits.maxConcurrentHandlers) {
-          response(
+        if (!registration || endpoint.active >= bounds.maxConcurrentHandlers) {
+          respond(
             message,
             undefined,
-            new DuplexError(
+            new PublicError(
               registration ? 'busy' : 'method_not_found',
               registration ? 'Incoming request limit reached.' : 'Unknown method.',
             ),
@@ -222,9 +236,8 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
         endpoint.active++;
         call!.active = true;
         call!.registration = registration;
-        const context = Object.create(call!.source?.context ?? null) as WireRequestContext;
+        const context = Object.create(call!.source?.context ?? null) as ReceivedRequestContext;
         Object.defineProperties(context, {
-          wire: { value: endpoint.wire, enumerable: true },
           signal: {
             value: call!.source
               ? AbortSignal.any([call!.controller.signal, call!.source.context.signal])
@@ -235,21 +248,10 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
           ...(frame.meta ? { meta: { value: { ...frame.meta }, enumerable: true } } : {}),
         });
         if (!call!.source) propagator.extract(context, traceOf(frame));
-        call!.cleanup = setWireContext(call!.returning, {
+        call!.cleanup = setDispatchContext(call!.returning, {
           context,
           completion: call!.source?.completion,
-          maxFrameBytes: limits.maxFrameBytes,
-          panic:
-            call!.source?.panic ??
-            ((error) =>
-              observe({
-                type: 'handler.panic',
-                at: new Date(),
-                method: encodePath(path),
-                value: String(error),
-                trace: traceOf(frame),
-                family: options.families?.[encodePath(path)] ?? '',
-              })),
+          maxFrameBytes: bounds.maxFrameBytes,
         });
         call!.timer = setTimeout(() => {
           if (closed || call!.completed) return;
@@ -267,11 +269,11 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
           // actual response, bounding applications that ignore cancellation.
           if (!call!.responded) {
             call!.responded = true;
-            response(call!.original, undefined, new DuplexError('cancelled', 'Request deadline exceeded.'));
+            respond(call!.original, undefined, new PublicError('cancelled', 'Request deadline exceeded.'));
           }
-        }, limits.requestTimeoutMs);
+        }, bounds.requestTimeoutMs);
         const pending = invoke(registration, path, message);
-        if (pending) void pending.catch((error: unknown) => response(message, undefined, publicError(error)));
+        if (pending) void pending.catch((error: unknown) => respond(message, undefined, publicError(error)));
       }
     } finally {
       endpoint.draining = false;
@@ -286,74 +288,72 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
     });
   };
   const admit = (endpoint: PairEnd, path: Path, original: Message) => {
-    if (closed) throw disconnected();
+    if (closed) throw ended();
     const name = encodePath(path),
-      frame = profileFrame(original.frame, name, limits.maxFrameBytes);
+      frame = profileFrame(original.frame, name, bounds.maxFrameBytes);
     if (frame.kind !== 'request' && frame.kind !== 'event' && frame.kind !== 'cancel')
-      throw new DuplexError('invalid_message', "A response is sent to its request's return address.");
+      throw new PublicError('invalid_message', "A response is sent to its request's return address.");
     if (frame.kind !== 'event' && !original.return?.wire)
-      throw new DuplexError('invalid_message', 'A wire request or cancellation requires a return address.');
+      throw new PublicError('invalid_message', 'A wire request or cancellation requires a return address.');
     const message: Message = { frame, return: original.return };
-    let call: LocalCall | undefined, refusal: DuplexError | undefined;
+    let call: LocalCall | undefined, refusal: PublicError | undefined;
     if (frame.kind === 'cancel') {
       call = endpoint.calls.get(message.return!)?.get(frame.id);
       if (!call || call.completed || call.cancelQueued || call.cancelled) return;
       call.cancelQueued = true;
     } else {
-      if (endpoint.queued >= limits.queueCapacity) {
-        const error = new DuplexError('busy', 'Local wire queue limit reached.');
-        observe({
-          type: 'backpressure',
-          at: new Date(),
-          queued: endpoint.queued,
-          stalled: true,
-          deadlineMs: limits.writeTimeoutMs,
-        });
+      if (endpoint.queued >= bounds.queueCapacity) {
+        // A full queue ends the carrier; the refused send reports it ended.
+        const error = new PublicError('busy', 'Local wire queue limit reached.');
         fail(error);
-        throw error;
+        throw ended(error);
       }
       endpoint.queued++;
       if (frame.kind === 'request') {
         let calls = endpoint.calls.get(message.return!);
-        if (calls?.has(frame.id)) refusal = new DuplexError('invalid_message', 'Duplicate active request identifier.');
-        else if (endpoint.retained >= limits.maxPendingRequests)
-          refusal = new DuplexError('busy', 'Outstanding call limit reached.');
+        if (calls?.has(frame.id)) refusal = new PublicError('invalid_message', 'Duplicate active request identifier.');
+        else if (endpoint.retained >= bounds.maxPendingRequests)
+          refusal = new PublicError('busy', 'Outstanding call limit reached.');
         else {
           const invocation = new Invocation(defaultInvocationLimits());
-          const returning: ReturnAddress = {
-            wire: {
-              send: (suffix, reply) => {
-                if (suffix.length) {
-                  invocation.deliver(suffix, reply);
-                  return;
-                }
-                if (reply.frame.kind !== 'response' || reply.frame.id !== frame.id)
-                  throw new DuplexError('invalid_message', 'Invalid wire response.');
-                // A refused encoding may be retried as the shared bounded
-                // internal-error fallback; only an admitted response completes.
-                const checked = profileFrame(reply.frame, '', limits.maxFrameBytes);
-                try {
-                  if (call!.responded || call!.completed) throw disconnected();
-                  call!.responded = true;
-                  try {
-                    message.return!.wire.send([], { frame: checked });
-                  } catch (error) {
-                    throw error instanceof DuplexError ? publicError(error) : error;
-                  }
-                  invocation.settle();
-                } finally {
-                  complete(endpoint, call!);
-                }
-              },
+          const returning: AddressedWire = {
+            send: (suffix, reply) => {
+              if (suffix.length) {
+                invocation.deliver(suffix, reply);
+                return;
+              }
+              if (reply.frame.kind !== 'response' || reply.frame.id !== frame.id)
+                throw new PublicError('invalid_message', 'Invalid wire response.');
+              // A refused encoding may be retried as the shared bounded
+              // internal-error fallback; only an admitted response completes.
+              const checked = profileFrame(reply.frame, '', bounds.maxFrameBytes);
+              if (call!.responded || call!.completed) {
+                // A deadline already answered the caller. This is the handler's
+                // actual response, which is what releases its budget.
+                complete(endpoint, call!);
+                throw ended();
+              }
+              call!.responded = true;
+              // Retire before the caller can hold its answer: a caller that
+              // issues its next call as soon as this one returns must find the
+              // slot free. A queued cancellation keeps the reservation until
+              // it drains.
+              complete(endpoint, call!);
+              invocation.settle();
+              try {
+                message.return!.wire.send([], { frame: checked });
+              } catch (error) {
+                throw error instanceof PublicError ? publicError(error) : error;
+              }
             },
           };
           call = {
             id: frame.id,
             original: message,
             path: [...path],
-            returning,
+            returning: { wire: returning },
             invocation,
-            source: wireContext(message.return!),
+            source: dispatchContext(message.return),
             cleanup: () => {},
             controller: new AbortController(),
             completed: false,
@@ -391,14 +391,16 @@ export function wirePair(options: PeerOptions = {}): [Endpoint, Endpoint] {
     endpoint.wire = {
       send: (path, message) => admit(endpoint.other, path, message),
       receive: (receiver) => {
-        if (closed) throw disconnected();
-        if (endpoint.attachment) throw new WireError('receiver_exists');
+        if (closed) throw ended();
+        if (endpoint.attachment) throw new ReceiverExistsError();
         const registration = { receiver };
         endpoint.attachment = registration;
         return () => {
           if (endpoint.attachment === registration) delete endpoint.attachment;
         };
       },
+      // Nothing is transmitted in-process, so any code closes the pair as an
+      // abort would: its receivers are told the code and the reason.
       close: end,
     };
     ends.push(endpoint);

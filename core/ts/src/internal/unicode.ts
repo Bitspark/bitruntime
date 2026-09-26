@@ -1,4 +1,7 @@
-/** Unicode is checked before parsing or serialization can discard a string. */
+/**
+ * Unicode is checked before parsing or serialization can discard a string.
+ * Module-private: no package subpath exports it.
+ */
 const refusal = 'invalid Unicode: expected Unicode scalar strings';
 
 export function scalarString(value: string): void {

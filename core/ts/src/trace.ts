@@ -55,21 +55,6 @@ export const defaultPropagator: Propagator = {
   },
 };
 
-/** The members an incoming frame carries, verbatim: what a propagator extracts. */
-export function traceOf(frame: { readonly traceparent?: unknown; readonly tracestate?: unknown }): Trace | undefined {
-  const traceparent = typeof frame.traceparent === 'string' ? frame.traceparent : '';
-  const tracestate = typeof frame.tracestate === 'string' ? frame.tracestate : '';
-  if (!traceparent && !tracestate) return undefined;
-  return tracestate ? { traceparent, tracestate } : { traceparent };
-}
-
-/** Stamps onto an outgoing frame what a propagator minted; an empty member is none. */
-export function traced(envelope: Record<string, unknown>, trace: Trace | undefined): Record<string, unknown> {
-  if (trace?.traceparent) envelope.traceparent = trace.traceparent;
-  if (trace?.tracestate) envelope.tracestate = trace.tracestate;
-  return envelope;
-}
-
 /** Web Crypto is the only source; the runtime takes no dependency for it. */
 function randomHex(bytes: number): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (byte) => byte.toString(16).padStart(2, '0')).join(

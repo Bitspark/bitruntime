@@ -1,6 +1,10 @@
-/** Internal frame validation and carriage shared by the peer and its conformance tests. */
-import { DuplexError } from './error.ts';
-import type { Meta } from './peer.ts';
+/**
+ * The bitwire/1 envelope: frame validation and carriage shared by the protocol
+ * engine, the local pair and the request helpers. Module-private: no package
+ * subpath exports it.
+ */
+import { PublicError } from '../error.ts';
+import type { Meta } from '../meta.ts';
 import { scalarJSON } from './unicode.ts';
 
 /** A decoded JSON envelope; the connection beneath carries it as a text frame. */
@@ -150,7 +154,7 @@ function carriage(frame: Envelope): void {
 }
 export function requireName(value: unknown, field: string): asserts value is string {
   if (typeof value !== 'string' || value.length === 0)
-    throw new DuplexError('invalid_message', `${field} must be a nonempty string.`);
+    throw new PublicError('invalid_message', `${field} must be a nonempty string.`);
 }
 function requestID(value: unknown, prefix: string): void {
   if (typeof value !== 'string' || !value.startsWith(prefix) || !/^[1-9][0-9]{0,19}$/.test(value.slice(prefix.length)))

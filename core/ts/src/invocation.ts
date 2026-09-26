@@ -1,11 +1,11 @@
-import type { Message, Path, Wire } from '@nightseam/duplex';
+import type { AddressedWire, Message, Path } from '@bitspark/bitwire';
 
 /**
- * An admitted request's return capability is the invocation, presented as a
- * Wire. The empty path carries its outcome, as it always has; these operations
- * carry its lifecycle. They are ordinary events of the profile — a layer's own
+ * An admitted request's return capability is the invocation, presented as
+ * addressed access. The empty path carries its outcome, as it always has; these
+ * operations carry its lifecycle. They are ordinary events of the profile — a layer's own
  * vocabulary, as `channel.` is the tunnel's — and a participant needs nothing
- * of Nightseam's to speak them but the Wire it was already handed.
+ * of bitruntime's to speak them but the return capability it was handed.
  *
  * The capture or body a verb is about is one opaque segment after the
  * operation, because a path is what addresses a thing. The verbs never reach a
@@ -56,7 +56,7 @@ const nextIdentifier = (): string => String(++identifiers);
 const event = (): Message => ({ frame: { version: 1, kind: 'event', data: null } });
 
 interface Capture {
-  sink: Wire;
+  sink: AddressedWire;
   ready: boolean;
   notified: boolean;
 }
@@ -64,7 +64,7 @@ interface Capture {
 /**
  * The lifecycle an admitting runtime keeps for one admitted request, and the
  * answer its return capability gives to the vocabulary above. A runtime that is
- * not Nightseam's composes it — or answers the same paths itself — and the same
+ * not bitruntime composes it — or answers the same paths itself — and the same
  * participants work against either.
  */
 export class Invocation {
@@ -146,7 +146,7 @@ export class Invocation {
     this.#retire();
   }
 
-  #capture(identifier: string, sink: Wire): void {
+  #capture(identifier: string, sink: AddressedWire): void {
     if (this.#retired) throw new InvocationError('ended');
     if (this.#captures.has(identifier)) throw new InvocationError('duplicate');
     if (this.#taken >= this.#limits.captures) throw new InvocationError('limit');
@@ -201,7 +201,7 @@ export class Invocation {
   #latch(message: Message): void {
     if (this.#retired || this.#control) return;
     this.#control = message;
-    const sinks: Wire[] = [];
+    const sinks: AddressedWire[] = [];
     for (const capture of this.#captures.values()) {
       if (!capture.ready || capture.notified) continue;
       capture.notified = true;
@@ -215,7 +215,7 @@ export class Invocation {
    * Runs participant code while one control reservation is held, so that
    * retirement cannot reclaim a capture a control is still reaching.
    */
-  #push(sinks: readonly Wire[], message: Message): void {
+  #push(sinks: readonly AddressedWire[], message: Message): void {
     try {
       for (const sink of sinks) {
         try {
@@ -243,8 +243,8 @@ export class Invocation {
   }
 }
 
-/** The Wire a capture is pushed its control through, and nothing else. */
-class InvocationSink implements Wire {
+/** The AddressedWire a capture is pushed its control through, and nothing else. */
+class InvocationSink implements AddressedWire {
   readonly #control: (message: Message) => void;
   constructor(control: (message: Message) => void) {
     this.#control = control;
@@ -255,7 +255,7 @@ class InvocationSink implements Wire {
   }
 }
 
-const invocationWire = (message: Message): Wire => {
+const invocationWire = (message: Message): AddressedWire => {
   const wire = message.return?.wire;
   if (!wire) throw new InvocationError('unsupported');
   return wire;
@@ -267,11 +267,11 @@ const invocationWire = (message: Message): Wire => {
  * handle, so no two traversals share a slot.
  */
 export class InvocationCaptureHandle {
-  readonly #wire: Wire;
+  readonly #wire: AddressedWire;
   readonly #identifier: string;
   #ready = false;
   #released = false;
-  constructor(wire: Wire, identifier: string) {
+  constructor(wire: AddressedWire, identifier: string) {
     this.#wire = wire;
     this.#identifier = identifier;
   }
@@ -318,10 +318,10 @@ export function captureInvocation(message: Message, control: (message: Message) 
 
 /** One execution lease of one admitted invocation. */
 export class InvocationBodyHandle {
-  readonly #wire: Wire;
+  readonly #wire: AddressedWire;
   readonly #identifier: string;
   #done = false;
-  constructor(wire: Wire, identifier: string) {
+  constructor(wire: AddressedWire, identifier: string) {
     this.#wire = wire;
     this.#identifier = identifier;
   }

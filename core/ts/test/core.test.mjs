@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   asAddressed, compose, InvalidPathError, MissingPathError, select, send,
-} from '../dist/index.js';
+} from '../../../dist/core/ts/src/index.js';
 
 const key = (...bytes) => Uint8Array.from(bytes);
 const text = value => new TextEncoder().encode(value);

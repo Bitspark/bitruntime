@@ -1,9 +1,0 @@
-bitruntime
-Copyright 2026 Bitspark and the bitruntime contributors
-
-This product includes software developed at Bitspark (https://github.com/Bitspark).
-
-The structural-core implementations are written against the public Bitwire
-0.3.0 contract. Structural test expectations are derived from Bitwire's
-independent conformance/trees/expected.json under Apache-2.0. No Nightseam
-runtime source is ported in the v0.1.0 structural core.

@@ -36,8 +36,18 @@ as their own commit, and every modification is a later commit.
   runtime/go/http.go                engine/websocket/go
   runtime/go/json.go,
     internal/scalarjson             internal/profile/go
-  duplex/ts/src, runtime/ts/src     transports/ts, core/ts, engine/ts,
-                                    dispatch/ts
+  duplex/ts/src/index.ts            transports/ts
+  duplex/ts/src/wire.ts             core/ts/src/addressed.ts,
+                                    core/ts/src/internal/path.ts
+  runtime/ts/src/wire-pair.ts,
+    invocation.ts, trace.ts,
+    error.ts                        core/ts/src
+  runtime/ts/src/envelope.ts,
+    unicode.ts                      core/ts/src/internal
+  runtime/ts/src/wire.ts            dispatch/ts/src, core/ts/src/forward.ts,
+                                    core/ts/src/internal, engine/ts/src
+  runtime/ts/src/dispatcher.ts      dispatch/ts/src/dispatcher.ts
+  runtime/ts/src/peer.ts            engine/ts/src/peer.ts
   runtime/go and runtime/ts tests   the corresponding *_test.go and ts/test
 
 The files under vectors/bitwire-1/ are byte-identical copies of Nightseam

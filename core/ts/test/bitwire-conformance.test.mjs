@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { compose, select, send } from '../dist/index.js';
+import { compose, select, send } from '../../../dist/core/ts/src/index.js';
 
 // Independent oracle: Bitspark/bitwire 0.3.0, conformance/trees/expected.json.
 // This driver uses the production runtime, not Bitwire's test interpreter.
