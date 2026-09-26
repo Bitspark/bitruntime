@@ -63,6 +63,13 @@ Evaluate `Wire = A0` and `Bitwire = Deixis[Wire] = A1` explicitly: addressed
 the primitive. Preserve the distinction between a declared tree and opaque access
 to one. This alternative is an exploration, not an approved exact API.
 
+Keep both contracts in `github.com/Bitspark/bitwire`: `Wire` is the addressless
+primitive and `Bitwire = Deixis[Wire]` is the proposed addressed construction.
+Their interfaces, laws and independent conformance belong in that repository;
+bitruntime implements both. Do not create another repository for the primitive.
+The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
+the layout rule does not require a module per type.
+
 The first design deliverable must resolve, or explicitly defer with a documented
 version boundary:
 

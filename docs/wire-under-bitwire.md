@@ -10,6 +10,23 @@ close to [Deixis #49](https://github.com/Bitspark/deixis/issues/49).
 It separates the names and responsibilities more clearly than calling both
 levels Wire. It still needs a precise contract and crossing evidence.
 
+## Both contracts in the Bitwire repository
+
+The proposed arrangement keeps both `Wire` and `Bitwire` in
+[`github.com/Bitspark/bitwire`](https://github.com/Bitspark/bitwire). `Wire`
+specifies addressless delivery; `Bitwire = Deixis[Wire]` specifies its structural,
+addressed construction. Their native interfaces, laws and independent cases
+belong together there. A separate repository for the Wire primitive is not
+needed. bitruntime implements both; Deixis owns the generic structural model.
+
+They can initially be two native types in the existing `wire/go/` and
+`wire/ts/` presentations. Separate component packages are justified only if an
+independent import boundary helps a real consumer. The source-layout convention
+does not demand one directory, module or publication for every type.
+
+This makes the proposed repository home explicit while leaving the exact API,
+message/profile allocation and version transition to the design decision.
+
 ## The decomposition
 
 ```text
@@ -78,6 +95,10 @@ For fully declared structures, `Deixis[Wire]` is literal. Public Bitwire access
 is a capability to use such a structure, potentially remote or opaque. Sending
 access must not grant enumeration, decomposing parts, reassembly authority,
 receiver attachment or closure ownership.
+
+An `origin()` operation on public access must preserve the selected view's
+interception and attenuation. It is addressless sending through that view, not
+an accessor that exposes the construction owner's unguarded raw capability.
 
 A finite tree of raw origin Wires alone cannot represent every current opaque
 path-dispatching endpoint, such as one whose descendants are discovered on use.

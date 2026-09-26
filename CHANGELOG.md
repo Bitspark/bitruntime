@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Make the explored Wire/Bitwire split explicit within the same Bitwire contract
+  repository, and preserve attenuation when selecting an origin's send access.
+
 - Document the family component-first layout with two-letter language directories,
   command paths and explicit adoption notes for existing source. Add the interactive
   kickoff for the first runtime and bitsystem3 migration.
