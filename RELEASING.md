@@ -1,27 +1,32 @@
-# Releasing the structural core
+# Releasing
 
-The first release contains only the complete structural core. It does not
-deliver transports, an invocation runtime, dispatch, an RPC engine, or the
-Nightseam consumer migration.
+A release is one root tag that versions the Go module and the TypeScript
+package together. Each release states the Bitwire contract version it
+implements, the protocol revisions it speaks and the conformance evidence it
+passed (charter §2); `docs/RELEASE.md` is the release's notes.
 
 Coordinates:
 
-- Go module `github.com/Bitspark/bitruntime`, package `core/go`.
-- TypeScript package `@bitspark/bitruntime-core`, source and manifest `core/ts`,
-  for v0.1.0. From 0.2.0 the TypeScript implementation is one package,
-  `@bitspark/bitruntime`, whose manifest and lockfile are at the repository
-  root; its sources stay under `<component>/ts/src` and it exports the
-  subpaths `@bitspark/bitruntime/core`, `/transports`, `/engine` and
-  `/dispatch`.
-- The root `v0.1.0` tag versions this initial module pair together. Further
-  runtime components require an explicit module/versioning decision.
+- Go module `github.com/Bitspark/bitruntime`, distributed by its root `vX.Y.Z`
+  tags, with the packages `core/go`, `transports/go`, `transports/websocket/go`,
+  `engine/go`, `engine/websocket/go` and `dispatch/go`.
+- TypeScript package `@bitspark/bitruntime`, whose manifest and lockfile are at
+  the repository root. Its sources stay under `<component>/ts/src`, and it
+  exports the subpaths `/core`, `/transports`, `/engine` and `/dispatch`.
+  v0.1.0 shipped the structural core alone as `@bitspark/bitruntime-core` from
+  `core/ts`.
+- A later component records its module boundary here before it is released.
 
 Both implementations use the public Bitwire 0.3.0 contract. No dependency on a
 private Deixis checkout, local replacement, or Nightseam may enter the release.
+The Nightseam v0.6.0 interoperability programs are test-only: their Go module is
+nested under `conformance/interop` and their npm package is never packed.
 
 Before tagging, land a reviewed green PR on main. The CI workflow checks Go
 formatting/vet/race tests, TypeScript checking/build/tests, the independent
-Bitwire structural oracle, and a fresh installed TypeScript tarball consumer.
+Bitwire structural oracle, a fresh installed TypeScript tarball consumer, and
+interoperability with Nightseam v0.6.0 peers in every Go/TypeScript pairing,
+byte for byte.
 Confirm the actual Bitwire dependency release is publicly installable and run
 the same checks locally where supported. Validate a fresh Go consumer against
 the pushed commit, then against the final tag.
