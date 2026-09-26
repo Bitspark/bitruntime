@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Name npm 12's `allow-remote=root` in the install instructions: npm 12 refuses
+  a tarball-URL dependency, the form a release is installed in, unless the
+  consuming project allows it.
+
+## 0.2.0 (26 September 2026)
+
 - Implement the path hand-written adapters use, ported from nightseam v0.6.0
   (`5cc9723`) with provenance in `NOTICE`: the transport seam, in-memory pipe
   and WebSocket (`transports`); `At`, `Mount`, `Forward`, the local pair and the
