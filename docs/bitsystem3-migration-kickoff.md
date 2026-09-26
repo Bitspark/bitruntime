@@ -27,6 +27,12 @@ generated consumers, live/tunnel migrations and the rest of Nightseam's
 retirement remain separately tracked; do not silently expand this session to
 all of them.
 
+The small structural core already exists in `core/go` and `core/ts`:
+construction, selection, decomposition, derived send and a local addressed
+facade. Reuse it and its independent structural evidence. It does not provide
+carriers, dispatch, invocation lifecycle or remote-tree discovery; do not mark
+this complete consumer milestone finished because that core is released.
+
 ## Read and reconcile before fixing the public API
 
 Inspect current local and remote state, uncommitted work, active branches, open

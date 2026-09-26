@@ -1,0 +1,20 @@
+{
+  "name": "@bitspark/bitruntime-core",
+  "version": "0.1.0",
+  "description": "Immutable WireTree construction and structural interaction operators.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/Bitspark/bitruntime.git", "directory": "core/ts" },
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "README.md", "LICENSE", "NOTICE"],
+  "sideEffects": false,
+  "publishConfig": { "registry": "https://registry.npmjs.org", "access": "public" },
+  "scripts": {
+    "check": "tsc -p tsconfig.check.json",
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": { "@bitspark/bitwire": "0.3.0" },
+  "devDependencies": { "typescript": "5.9.3" }
+}

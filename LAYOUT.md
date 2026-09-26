@@ -34,12 +34,15 @@ rewrite an immutable published release or bypass a frozen-foundation policy.
 
 ## Adoption in this repository
 
-The charter's first milestone uses `core/{go,ts}`, `transports/{go,ts}`,
-`engine/{go,ts}` and `dispatch/{go,ts}`. Later modules use the same shape:
+The initial structural core is delivered in `core/{go,ts}`. Its Go module
+manifest stays at the root; TypeScript package metadata stays in `core/ts`.
+The next runtime milestone uses `transports/{go,ts}`, `engine/{go,ts}` and
+`dispatch/{go,ts}`. Later modules use the same shape:
 `live/{go,ts}`, `tunnel/{go,ts}`, `telemetry/{go,ts}` and
-`auth-integration/{go,ts}`. These are intended paths, not delivered packages.
+`auth-integration/{go,ts}`. Those are intended paths, not delivered packages.
 Do not create empty language packages. The module/package coordinates and
-release process must be specified before the first implementation release.
+release process are specified in [RELEASING.md](RELEASING.md) for the core;
+later modules need their own explicit allocation before release.
 
 Start the first consumer migration with the
 [kickoff prompt](docs/bitsystem3-migration-kickoff.md).

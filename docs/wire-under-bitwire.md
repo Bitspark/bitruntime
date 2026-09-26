@@ -1,7 +1,7 @@
 # Data / DataTree and Wire / WireTree
 
-**Status: maintainer-selected contract, 2026-09-26; runtime implementation
-pending.** [Bitwire decision 0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md)
+**Status: maintainer-selected contract, 2026-09-26; structural core implemented,
+carrier/runtime migration pending.** [Bitwire decision 0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md)
 records the names and full structural obligation:
 
 ```ts
@@ -67,6 +67,13 @@ receiver attachment or ownership of another endpoint's lifetime.
 These are native presentations of the same semantic contract, not permission
 to add a private checkout dependency. A shared library dependency must be
 public, released, versioned and consistent with the affected charters.
+
+TypeScript's structural types let the generic core consume either family's
+matching node interface directly. Go's recursive return types retain package
+identity: Bitstore's `DeixisNode[Data]` needs an explicit adapter to Bitwire's
+`DeixisNode[Data]` before using this runtime's generic operators. This release
+does not claim direct Go assignment or introduce a storage-to-interaction
+production dependency. The adapter must preserve the common structural laws.
 
 ## Derived reading and sending
 
@@ -178,9 +185,11 @@ does not prove complete remote-tree access.
 
 ## Runtime delivery still required
 
-This document records the accepted API direction, not a networking release.
-The [kickoff](bitsystem3-migration-kickoff.md) still requires implementation,
-independent Go/TypeScript conformance, carriers and explicit bridges, admission
+The Go/TypeScript core now provides composition, selection, complete parts,
+derived sending and a local AddressedWire facade. It is independently checked
+against Bitwire's structural oracle. This is not a networking release.
+The [kickoff](bitsystem3-migration-kickoff.md) still requires remaining runtime
+implementation, independent carrier conformance, remote bridges, admission
 and lifecycle evidence, interoperable released packages, and the complete
 bitsystem3 adoption. The wider services work remains tracked in
 [deixis-svc #1](https://github.com/Bitspark/deixis-svc/issues/1),

@@ -1,0 +1,23 @@
+{
+  "self": true,
+  "binary": "binary",
+  "emptyKey": "empty",
+  "missing": true,
+  "nested": "leaf",
+  "nestedLaw": true,
+  "children": [
+    "",
+    "61",
+    "612f62",
+    "ff"
+  ],
+  "slashIsLiteral": true,
+  "partsIdentity": true,
+  "rebuildIdentity": true,
+  "keyCopy": true,
+  "refusingExists": true,
+  "refusingSend": true,
+  "admissions": [
+    "binary:event"
+  ]
+}

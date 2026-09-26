@@ -57,13 +57,26 @@ Each release states:
 - which protocol revisions it implements (`bitwire/1`, …);
 - which conformance suite revision it passes.
 
-Modules are versioned independently. Before 1.0 there is no compatibility
-promise. There are no aliases or re-exports of Nightseam.
+Modules are versioned independently. The first structural-core milestone uses
+one root Go module, `github.com/Bitspark/bitruntime`, with package `core/go`, and
+one TypeScript package, `@bitspark/bitruntime-core`, in `core/ts`. The initial
+root `v0.1.0` tag versions these two implementations together. Future components
+need their module boundaries recorded before joining this release unit or
+publishing separately. Before 1.0 there is no compatibility promise. There are
+no aliases or re-exports of Nightseam.
+
+The initial release process publishes Go through its source tag and TypeScript
+as a GitHub release tarball with checksums. Registry publication is separately
+configured and cannot be inferred from the presence of a tarball. See
+[RELEASING.md](RELEASING.md).
 
 ## 3. What independently written evidence checks the promise?
 
 - Bitwire's conformance cases, run against released bitruntime from a test-only
   module in Bitwire.
+- The initial core runs its actual implementations against Bitwire's independent
+  structural oracle as well as native edge cases. These observations do not
+  stand in for the still-pending carrier/runtime suites.
 - The portable byte vectors for `bitwire-stream/1`.
 - Interoperability runs against Nightseam v0.6.0 peers, until the last consumer
   moves.
@@ -101,7 +114,8 @@ bitsystem3 is the first consumer to move off Nightseam. It needs the path its
 hand-written adapters use: carriers, dispatch, helpers, selection and connection
 setup.
 
-The primitive/tree names and full structural obligations are settled. Runtime
-delivery, received-context evidence, lifecycle gaps and network/profile bridges
-remain work to implement and independently verify. See the
+The structural core implements the primitive/tree construction and derived-send
+obligations plus a local AddressedWire facade. Carrier/runtime delivery,
+received-context evidence, lifecycle gaps and remote/profile bridges remain
+work to implement and independently verify. See the
 [migration kickoff](docs/bitsystem3-migration-kickoff.md).

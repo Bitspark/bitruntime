@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Implement the first Go/TypeScript structural core: full generic tree
+  construction/selection/decomposition, derived sending, and an explicit
+  addressed facade with exact UTF-8 path conversion. Validate with independent
+  Bitwire structural observations, native edge cases and package consumers.
+  Establish source-tag and GitHub tarball delivery for this bounded core;
+  carriers and the wider runtime/consumer migration remain pending.
+
 - Adopt the maintainer's final primitive/tree names: addressless `Wire` and
   reading `Data`, with full `WireTree = DeixisNode<Wire>` and
   `DataTree = DeixisNode<Data>`. Document the common exact-byte-keyed structure,

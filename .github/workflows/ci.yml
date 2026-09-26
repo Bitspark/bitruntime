@@ -1,0 +1,39 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: core/ts/package-lock.json
+      - name: Go formatting
+        run: test -z "$(gofmt -l core/go)"
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+      - run: npm ci --ignore-scripts
+        working-directory: core/ts
+      - run: npm run check
+        working-directory: core/ts
+      - run: npm run build
+        working-directory: core/ts
+      - run: npm test
+        working-directory: core/ts
+      - run: node scripts/package-smoke.mjs

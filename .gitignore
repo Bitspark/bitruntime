@@ -6,7 +6,10 @@ node_modules/
 .env.*
 !.env.example
 secrets/
+coverage/
+*.tgz
 *.exe
 *.log
 .DS_Store
 Thumbs.db
+release/
