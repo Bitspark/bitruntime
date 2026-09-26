@@ -2,12 +2,17 @@
 
 Read the [charter](CHARTER.md), and in Bitwire read
 [decision 0007](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0007-using-bitwire-never-requires-nightseam.md),
-[decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md)
+[decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md),
+[decision 0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md)
 and the [carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md),
 before changing this tree.
 
 - Implement the Bitwire contract; never redefine it. If the contract or a
   specification looks wrong, raise it in Bitwire, don't work around it here.
+- Use `Wire.send(message)` and full `WireTree = DeixisNode<Wire>`, symmetric
+  with Bitstore's `Data.read()` / `DataTree = DeixisNode<Data>`. The old
+  path-taking access is explicitly `AddressedWire`. Never disguise an opaque
+  router as a full tree or implement the superseded `End` naming proposal.
 - Depend on Bitwire and, in their own modules, on transport libraries. Never
   depend on Nightseam, bittype or Bitlink.
 - When porting from Nightseam:

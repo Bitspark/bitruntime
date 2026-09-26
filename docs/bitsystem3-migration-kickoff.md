@@ -34,8 +34,10 @@ PRs, issue comments and dependency versions. Read each repository's AGENTS.md,
 contribution/release guidance and local LAYOUT.md before touching it.
 
 Read this repository's CHARTER.md and, in Bitwire:
-- decisions 0006, 0007, 0008, 0009 and especially 0010;
-- the current Wire, profile, composition and carrier specifications;
+- decisions 0006, 0007, 0008, 0009, 0010 and especially
+  [0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md);
+- the current Wire/WireTree/AddressedWire, profile, composition and carrier
+  specifications;
 - [#39](https://github.com/Bitspark/bitwire/issues/39),
   [#42](https://github.com/Bitspark/bitwire/issues/42) and
   [#20](https://github.com/Bitspark/bitwire/issues/20).
@@ -55,55 +57,64 @@ bitruntime implements.** Bitwire must not gain a production dependency on
 bitruntime or Nightseam. bittype owns the new wire-independent language;
 bitschema owns validation; Bitlink owns adapters and their generation.
 
-The API is not fully settled.
+The primitive/tree API and naming are settled; remaining runtime and lifecycle
+choices must be resolved against that contract.
 
-Read the maintainer-requested [End underneath Bitwire exploration](wire-under-bitwire.md).
-Use `End = A0` and `Bitwire = Deixis[End] = A1` as the target decomposition: addressed
-`Send(path, message)` may survive as a derived convenience API without remaining
-the primitive. Preserve the distinction between a declared tree and opaque access
-to one. The exact API remains open.
+Read [Data / DataTree and Wire / WireTree](wire-under-bitwire.md). The final
+maintainer decision on 2026-09-26 supersedes the earlier `End` proposal and draft
+[Bitwire PR #49](https://github.com/Bitspark/bitwire/pull/49):
 
-The maintainer revised the primitive name to **End** on 2026-09-26. Keep today's
-addressed `Wire` type names in all eight language presentations. Bitwire names
-the structured interaction model; its native addressed interface remains Wire.
-The earlier proposal to reuse Wire for the primitive is superseded. Preserving
-the addressed name leaves exact interface and profile changes subject to their
-own contract and version decisions.
+```ts
+interface Data { read(): Promise<Bytes>; }
+interface Wire { send(message: Message): void; }
 
-The maintainer selected the counterpart name on 2026-09-26:
-**`Bitdata = Deixis[Bytes]`**. Use Bitwire for structured interaction, Bitdata for
-structured byte content, and Bitstore for persistence. The current Store backend
-holds raw content-addressed blobs; the data model has Bytes at each node. Carry
-these names into the design and coordination documents. The storage work remains
-with its existing workstreams and does not enlarge this networking milestone.
+type DataTree = DeixisNode<Data>;
+type WireTree = DeixisNode<Wire>;
+```
 
-Keep both contracts in `github.com/Bitspark/bitwire`: `End` is the addressless
-primitive and `Wire` supplies addressed access to `Bitwire = Deixis[End]`.
-Their interfaces, laws and independent conformance belong in that repository;
-bitruntime implements both. Do not create another repository for the primitive.
-The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
-the layout rule does not require a module per type.
+Both are full Deixis structures: own value, complete exact-byte-keyed children,
+partial `at(path)`, decomposition and reconstruction. For a present path:
 
-The Bitwire session (bitwire-12) has claimed this design deliverable on
-[Bitwire #42](https://github.com/Bitspark/bitwire/issues/42#issuecomment-5843652866)
-as a proposed decision 0011. Review that draft, run small experiments against it
-and report findings on #42 or its pull request; do not write a competing decision.
-The deliverable must resolve, or explicitly defer with a documented version
-boundary:
+```text
+read(tree, path)          = select(tree, path).own().read()
+send(tree, path, message) = select(tree, path).own().send(message)
+```
 
-- The exact interfaces for addressless End A0 and addressed Wire A1, and
-  their integration with today's addressed Wire. Do not copy the current addressed
-  Send signature and assume it constrains the primitive.
+Bitstore owns Data/DataTree. A materialized `DeixisNode<Bytes>` remains the
+codec snapshot, not the public DataTree capability type. Storage work remains
+with its workstreams and does not enlarge this networking milestone.
+
+Bitwire owns `Wire` and `WireTree`; bitruntime implements them. The old
+path-taking interface is explicitly `AddressedWire`, never an alias for
+`WireTree`. `Endpoint` extends `AddressedWire` and `ReturnAddress` retains that
+access for immutable `bitwire/1` profile behavior. An opaque addressed router
+cannot supply complete tree structure without an explicit, complete declaration.
+Native trees support arbitrary byte keys; the old carrier's UTF-8 string-path
+boundary must be enforced explicitly by adapters.
+
+Do not reopen the naming, preserve old addressed Wire aliases, or implement the
+superseded End design. Follow decision 0012 and its current conformance cases.
+Read draft 0011 only as historical analysis where useful. The existing
+`wire/go/` and `wire/ts/` presentations can hold the contract types; the layout
+rule does not require a module per type or a new primitive repository.
+
+Before implementation, resolve remaining runtime details, or explicitly defer
+them with a documented version boundary:
+
+- Full tree construction, derived sending, and explicit AddressedWire bridge
+  facilities in Go and TypeScript. Keep structural missing-path absence distinct
+  from a present refusing primitive and from failure observed after admission.
 - Which layer owns message representation, return capabilities, correlation,
   cancellation, invocation lifetime, path selection and endpoint ownership.
-- Own values, segment-to-byte-key mapping, opaque child boundaries, missing-path
-  behavior and retained-parts authority. Reconcile
+- Exact-byte-key adaptation, explicitly admitted remote structures, partial
+  selection behavior and retained-parts authority. Reconcile
   [Deixis #49](https://github.com/Bitspark/deixis/issues/49),
   [deixis-svc #1](https://github.com/Bitspark/deixis-svc/issues/1),
   [bitwire-svc #9](https://github.com/Bitspark/bitwire-svc/issues/9) and
   [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
-  End and Bytes must use the same structural contract; a generic relay does not
-  acquire application interpretation.
+  DataTree and WireTree must use the same full structural contract; a generic
+  relay does not acquire application interpretation. It must not advertise an
+  opaque router as a fully inspectable tree.
   Record any shared Deixis library dependency and reconcile it with the charters.
 - Public lifecycle facilities: admission, capture, cancellation, actual body
   completion, control drain and retirement are distinct. A timeout does not
@@ -114,9 +125,11 @@ boundary:
 - Carrier close/error classification, sendable versus observation-only close
   codes, buffering/backpressure bounds and exact package/module coordinates.
 
-Write down the proposed public Go/TS surface, ownership, version transition,
-dependency graph and independent acceptance cases. Ask for decisions that remain
-mine; never invent an approval or mark another coordinator's work complete.
+Write down the runtime's public Go/TS surface, ownership, version transition,
+dependency graph and independent acceptance cases. The names and full structural
+contract above already have the maintainer's approval. Ask only for consequential
+decisions that remain unresolved; never invent an approval or mark another
+coordinator's work complete.
 Do not block all useful work on those decisions: provenance, baseline capture and
 independently specified regression cases can proceed.
 
@@ -163,7 +176,8 @@ and provenance. Distinguish it from unreleased Nightseam improvements. Record
 ported source and modifications in NOTICE. Add no compatibility aliases,
 re-exports, local replace directives or sibling-checkout build dependencies.
 
-Implement core selection/composition/forwarding/local pairs, frame transports
+Implement full-tree selection/composition/decomposition, derived sending,
+explicit AddressedWire bridges, forwarding/local pairs, frame transports
 and WebSocket, the bitwire/1 peer and dial/accept setup, and dispatch/request/
 response/event helpers in Go and TypeScript. Port only what the milestone needs
 and fix the recorded defects in that path, especially
@@ -191,6 +205,11 @@ Hold these distinctions throughout:
   context/received evidence, reverse calls, cancellation and bounded overload.
   Where lifecycle acceptance requires two independent endpoint implementations
   and an opaque wrapper, use only the public contract in that evidence.
+- Verify the shared tree laws against both payload lanes: complete children,
+  exact byte keys (including empty and non-UTF-8 keys), empty-path identity,
+  missing-path absence, selected own values, and decomposition/reconstruction.
+  Show that opaque AddressedWire access cannot be accepted as a full WireTree.
+  Reject lossy key adapters rather than weakening the native tree contract.
 
 Publish the smallest complete module set through the configured release process.
 Check module coordinates, version tags, provenance and fresh external installs;
@@ -206,11 +225,13 @@ Audit go.mod/go.sum and package.json/package-lock.json for remaining Nightseam
 dependencies or alias shims.
 
 Preserve the space model: persistent ID, local facts, parent and name-to-child
-access. A child wire is an access capability; storage persists identities and
-relationships, not live wire objects. Browser/server and parent/child access
-should share the compositional abstraction. Preserve identity and local scope
-when selecting, mounting, remounting or retaining a child. Document what the
-migration actually enables; using a common abstraction does not by itself
+access. A complete represented space tree holds an own addressless Wire and
+child WireTrees; storage persists identities and relationships, not live wire
+objects. Browser/server and parent/child access should share that model through
+explicit bindings. An opaque network Endpoint remains AddressedWire access
+unless a complete structure is actually supplied. Preserve identity and local
+scope when selecting, mounting, remounting or retaining a child. Document what
+the migration actually enables; the common abstraction does not by itself
 provide distributed storage, cross-host transactions or authority propagation.
 
 Keep the frontend/backend/PostgreSQL Docker setup and Logos DB persistence.

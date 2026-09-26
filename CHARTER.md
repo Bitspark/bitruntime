@@ -7,7 +7,8 @@ coherent semantic decision.
 
 ## 1. What decisions does it own?
 
-How the Bitwire contract is implemented in Go and TypeScript:
+How the Bitwire contract is implemented in Go and TypeScript, including the
+maintainer's `Wire` / `WireTree` naming decision:
 
 - module layout and package coordinates;
 - concurrency, buffering and backpressure strategy, and resource bounds within the
@@ -20,6 +21,11 @@ How the Bitwire contract is implemented in Go and TypeScript:
   - `bitwire-stream/1` over stdio, TCP and Unix sockets.
 - the live-reference mechanism and tunnels. They depend on stated capabilities (an
   Endpoint plus lifetime and scope), not on a concrete peer.
+- concrete full `WireTree` construction, partial selection, decomposition and
+  reconstruction, using Deixis's generic byte-keyed structural contract;
+- derived sending through `select(tree, path).own().send(message)` and explicit
+  adapters to the separate `AddressedWire` carrier access contract. An opaque
+  router does not become a full tree merely by being wrapped or renamed.
 
 It does **not** own:
 
@@ -29,6 +35,19 @@ It does **not** own:
 - adapters or the identity check, which are Bitlink's;
 - validation, which is bitschema's;
 - authority, which stays with its consumers.
+
+The naming across the two families is `WireTree = DeixisNode<Wire>` and
+`DataTree = DeixisNode<Data>`. `Wire.send(message)` is addressless;
+`Data.read()` reads bytes. Bitstore owns `Data` and `DataTree`, and Deixis owns
+the common structure and laws. Materialized `DeixisNode<Bytes>` values remain
+the storage codec's snapshots. This charter does not move storage implementation
+into bitruntime.
+
+The full tree contract grants complete child enumeration. Restricted opaque
+access remains explicitly `AddressedWire`; it is not a structural tree type.
+Tree access alone grants neither receiver attachment nor endpoint closure.
+The `bitwire/1` addressed profile, `Endpoint` ownership and addressed return
+capabilities remain separate from the native primitive rename.
 
 ## 2. What does it promise consumers, and how is that versioned?
 
@@ -67,7 +86,7 @@ more:
 
 | Module | Contents |
 | --- | --- |
-| core | Operators (selection, mounting, forwarding, declared composition), the invocation lifecycle, the in-process pair |
+| core | Full WireTree construction/selection/decomposition, derived sending, explicit AddressedWire bridges, mounting/forwarding, the invocation lifecycle, the in-process pair |
 | transports | The frame transport interface, the in-memory pipe, WebSocket, `bitwire-stream/1` |
 | engine | The protocol engine (the peer), connection setup |
 | dispatch | The dispatcher and the request/response helpers |
@@ -81,3 +100,8 @@ more:
 bitsystem3 is the first consumer to move off Nightseam. It needs the path its
 hand-written adapters use: carriers, dispatch, helpers, selection and connection
 setup.
+
+The primitive/tree names and full structural obligations are settled. Runtime
+delivery, received-context evidence, lifecycle gaps and network/profile bridges
+remain work to implement and independently verify. See the
+[migration kickoff](docs/bitsystem3-migration-kickoff.md).

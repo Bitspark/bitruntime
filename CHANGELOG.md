@@ -2,16 +2,16 @@
 
 ## Unreleased
 
-- Name the addressless primitive End and retain the addressed Wire type names
-  in all eight languages; update the exploration and migration kickoff. The
-  kickoff points to the Bitwire session's claimed design deliverable on #42.
+- Adopt the maintainer's final primitive/tree names: addressless `Wire` and
+  reading `Data`, with full `WireTree = DeixisNode<Wire>` and
+  `DataTree = DeixisNode<Data>`. Document the common exact-byte-keyed structure,
+  partial selection, decomposition/reconstruction and derived send/read laws.
+  Mark earlier End/Bitdata naming proposals as superseded history.
 
-- Record the chosen naming pair, Bitwire = Deixis[End] and Bitdata =
-  Deixis[Bytes], in the exploration and migration kickoff; keep Bitstore's
-  persistence role and the remaining API decisions explicit.
-
-- Make the explored End/Wire split explicit within the same Bitwire contract
-  repository, and preserve attenuation when selecting an origin's send access.
+- Name the old opaque addressed access `AddressedWire` and keep the
+  Endpoint/return-capability boundary explicit. Update the charter, agent
+  instructions and migration kickoff to follow Bitwire decision 0012 without
+  claiming the runtime or consumer networking migration is implemented.
 
 - Document the family component-first layout with two-letter language directories,
   command paths and explicit adoption notes for existing source. Add the interactive
