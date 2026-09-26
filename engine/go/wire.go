@@ -54,6 +54,12 @@ type rootWire struct {
 }
 
 func (w *rootWire) Send(path []string, message wire.Message) error {
+	// Copy, then validate the copy (research 0001, row 28): a caller mutating
+	// its message during Send cannot publish bytes that were never validated.
+	path = append([]string(nil), path...)
+	message.Frame.Params = append(json.RawMessage(nil), message.Frame.Params...)
+	message.Frame.Data = append(json.RawMessage(nil), message.Frame.Data...)
+	message.Frame.Meta = maps.Clone(message.Frame.Meta)
 	name, err := profile.EncodePath(path)
 	if err != nil {
 		return core.Unpublished(err)
@@ -73,11 +79,7 @@ func (w *rootWire) Send(path []string, message wire.Message) error {
 	if err := profile.Validate(name, message.Frame, w.peer.options.MaxFrameBytes); err != nil {
 		return core.Unpublished(err)
 	}
-	// Copy, then keep: what is published is what was validated.
-	message.Frame.Params = append(json.RawMessage(nil), message.Frame.Params...)
-	message.Frame.Data = append(json.RawMessage(nil), message.Frame.Data...)
-	message.Frame.Meta = maps.Clone(message.Frame.Meta)
-	delivered := routedFrame{path: append([]string(nil), path...), message: message}
+	delivered := routedFrame{path: path, message: message}
 	key := returnKey{message.Return, message.Frame.ID}
 	w.mu.Lock()
 	if err := w.peer.Err(); err != nil {

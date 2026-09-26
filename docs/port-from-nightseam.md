@@ -73,6 +73,10 @@ None changes a `bitwire/1` frame.
 - **Receive limits.** A frame over the pipe's limit ends it with 1009 on both
   sides, as a WebSocket does; a WebSocket past its read limit is ended promptly
   instead of being left half closed.
+- **Copy, then validate (research 0001, row 28).** The pair, the root and the
+  call helper's reply copy a message's payloads before validating them, so a
+  caller that mutates its message during `Send` cannot admit bytes that were
+  never validated. v0.6.0's Go validated first.
 - **Forwarding (research 0001, row 14).** A message the destination refuses
   fails only that message; v0.6.0 detached both directions.
 - **Removed:** the peer's raw method-name API (`Handle`, `HandleEvent`,

@@ -142,6 +142,12 @@ type localCall struct {
 }
 
 func (w *localEnd) Send(path []string, message wire.Message) error {
+	// Copy, then validate the copy (research 0001, row 28): a caller mutating
+	// its message during Send cannot admit bytes that were never validated.
+	path = append([]string(nil), path...)
+	message.Frame.Params = append(json.RawMessage(nil), message.Frame.Params...)
+	message.Frame.Data = append(json.RawMessage(nil), message.Frame.Data...)
+	message.Frame.Meta = maps.Clone(message.Frame.Meta)
 	name, err := profile.EncodePath(path)
 	if err != nil {
 		return Unpublished(err)
@@ -155,11 +161,7 @@ func (w *localEnd) Send(path []string, message wire.Message) error {
 	if message.Frame.Kind != wire.ProfileEvent && (message.Return == nil || message.Return.Wire == nil) {
 		return Unpublished(errors.New("bitruntime: a request or cancellation requires a return address"))
 	}
-	// Copy, then keep: what the receiver sees is what was validated.
-	message.Frame.Params = append(json.RawMessage(nil), message.Frame.Params...)
-	message.Frame.Data = append(json.RawMessage(nil), message.Frame.Data...)
-	message.Frame.Meta = maps.Clone(message.Frame.Meta)
-	return w.other.admit(append([]string(nil), path...), message)
+	return w.other.admit(path, message)
 }
 
 func (w *localEnd) admit(path []string, message wire.Message) error {
@@ -512,6 +514,13 @@ func (r *localReturn) Send(path []string, message wire.Message) (err error) {
 	if message.Frame.Kind != wire.ProfileResponse || message.Frame.ID != r.call.message.Frame.ID {
 		return errors.New("bitruntime: invalid wire response")
 	}
+	// Copy, then validate the copy: the caller receives what was validated.
+	message.Frame.Result = append(json.RawMessage(nil), message.Frame.Result...)
+	if message.Frame.Error != nil {
+		copied := *message.Frame.Error
+		copied.Data = append(json.RawMessage(nil), copied.Data...)
+		message.Frame.Error = &copied
+	}
 	if err := profile.Validate("", message.Frame, r.end.pair.options.MaxFrameBytes); err != nil {
 		// Refused before completion, so the response helper can still send
 		// its bounded internal-error fallback.
@@ -538,11 +547,5 @@ func (r *localReturn) Send(path []string, message wire.Message) (err error) {
 			err = errors.New("bitruntime: wire return failed")
 		}
 	}()
-	message.Frame.Result = append(json.RawMessage(nil), message.Frame.Result...)
-	if message.Frame.Error != nil {
-		copied := *message.Frame.Error
-		copied.Data = append(json.RawMessage(nil), copied.Data...)
-		message.Frame.Error = &copied
-	}
 	return WithoutUnpublishedProof(r.call.key.address.Wire.Send(path, message))
 }

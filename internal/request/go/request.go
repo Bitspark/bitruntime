@@ -64,6 +64,14 @@ func (w *Reply) Send(path []string, message wire.Message) error {
 	if w.dispatch != nil {
 		limit = w.dispatch.MaxFrameBytes
 	}
+	// Copy, then validate the copy: the waiter keeps nothing the responder
+	// still owns.
+	message.Frame.Result = append(json.RawMessage(nil), message.Frame.Result...)
+	if message.Frame.Error != nil {
+		copied := *message.Frame.Error
+		copied.Data = append(json.RawMessage(nil), copied.Data...)
+		message.Frame.Error = &copied
+	}
 	if err := profile.Validate("", message.Frame, limit); err != nil {
 		return err
 	}
