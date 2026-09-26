@@ -1,7 +1,7 @@
 # Releasing
 
 A release is one root tag that versions the Go module and the TypeScript
-package together. Each release states the Bitwire contract version it
+package together. Each release states the bitwire contract version it
 implements, the protocol revisions it speaks and the conformance evidence it
 passed (charter §2); `docs/RELEASE.md` is the release's notes.
 
@@ -17,17 +17,17 @@ Coordinates:
   `core/ts`.
 - A later component records its module boundary here before it is released.
 
-Both implementations use the public Bitwire 0.3.0 contract. No dependency on a
-private Deixis checkout, local replacement, or Nightseam may enter the release.
-The Nightseam v0.6.0 interoperability programs are test-only: their Go module is
+Both implementations use the public bitwire 0.3.0 contract. No dependency on a
+private deixis checkout, local replacement, or nightseam may enter the release.
+The nightseam v0.6.0 interoperability programs are test-only: their Go module is
 nested under `conformance/interop` and their npm package is never packed.
 
 Before tagging, land a reviewed green PR on main. The CI workflow checks Go
 formatting/vet/race tests, TypeScript checking/build/tests, the independent
-Bitwire structural oracle, a fresh installed TypeScript tarball consumer, and
-interoperability with Nightseam v0.6.0 peers in every Go/TypeScript pairing,
+bitwire structural oracle, a fresh installed TypeScript tarball consumer, and
+interoperability with nightseam v0.6.0 peers in every Go/TypeScript pairing,
 byte for byte.
-Confirm the actual Bitwire dependency release is publicly installable and run
+Confirm the actual bitwire dependency release is publicly installable and run
 the same checks locally where supported. Validate a fresh Go consumer against
 the pushed commit, then against the final tag.
 

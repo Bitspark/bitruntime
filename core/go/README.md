@@ -1,7 +1,7 @@
 # Go structural core
 
 Package `github.com/Bitspark/bitruntime/core/go` implements the full structural
-contract declared by Bitwire 0.3.0. It uses Go 1.26, matching that dependency.
+contract declared by bitwire 0.3.0. It uses Go 1.26, matching that dependency.
 
 ```go
 import (
@@ -70,13 +70,13 @@ The runtime does not claim it can prove termination of arbitrary foreign
 `Children` implementations. Locally constructed nodes already enforce their
 structure and need no repeated traversal.
 
-Bitstore's Go declarations have the same semantics but define their own
+bitstore's Go declarations have the same semantics but define their own
 recursive `DeixisNode[T]` and `Child[T]` types. They are not directly assignable
-to Bitwire's Go interfaces: `At`, `Children`, and `Decompose` name different
+to bitwire's Go interfaces: `At`, `Children`, and `Decompose` name different
 return types. Interoperation requires an explicit adapter preserving own
 capability identity, complete children, exact keys, and selection/reconstruction
 laws. The TypeScript presentations are structurally assignable; that does not
-create Go type aliases or add a Bitstore dependency to this package.
+create Go type aliases or add a bitstore dependency to this package.
 
 ## Addressed access
 
@@ -106,5 +106,5 @@ The tests cover exact binary and empty keys, defensive copies, child and own
 identity, decomposition/reconstruction, partial selection, shared nodes,
 independent value implementations, identifiable cycles, deep foreign trees,
 derived sending, unchanged refusals, and Unicode-safe addressed access.
-`TestBitwireStructuralOracle` runs production operations against Bitwire's
+`TestBitwireStructuralOracle` runs production operations against bitwire's
 independent [observations](testdata/README.md).

@@ -1,7 +1,7 @@
 # bitruntime
 
 The Go and TypeScript implementation of the
-[Bitwire](https://github.com/Bitspark/bitwire) contract.
+[bitwire](https://github.com/Bitspark/bitwire) contract.
 
 **Status: the runtime path hand-written adapters use is implemented** (the next
 release after the structural core 0.1.0):
@@ -14,28 +14,28 @@ release after the structural core 0.1.0):
 - **dispatch:** the dispatcher and the `Call`, `Emit`, `Handle` and `Register`
   helpers.
 
-The runtime is ported from Nightseam v0.6.0 with its provenance in `NOTICE`, and
-fixes Nightseam's recorded defects in this path; see
+The runtime is ported from nightseam v0.6.0 with its provenance in `NOTICE`, and
+fixes nightseam's recorded defects in this path; see
 [the port record](docs/port-from-nightseam.md). The engine interoperates with
-Nightseam v0.6.0 peers in both roles and both languages and sends the same
+nightseam v0.6.0 peers in both roles and both languages and sends the same
 bytes (`node scripts/interop.mjs`). Live references, tunnels, the framed byte
 stream, telemetry and authentication integration remain planned under
-[Bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
+[bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
 
 ## Where it sits
 
 ```text
-bitruntime  →  Bitwire (the contract, the protocol and carrier specifications, conformance)
+bitruntime  →  bitwire (the contract, the protocol and carrier specifications, conformance)
 ```
 
-- **Bitwire** specifies addressless `Wire`, structural `WireTree`, and the
+- **bitwire** specifies addressless `Wire`, structural `WireTree`, and the
   separate `AddressedWire` carrier access contract. bitruntime implements them.
-- **Bitwire's conformance cases** judge bitruntime as an external implementation,
+- **bitwire's conformance cases** judge bitruntime as an external implementation,
   written from the specification and never recorded from this code.
-- **What bitruntime depends on.** Bitwire, and in separate modules, the libraries a
+- **What bitruntime depends on.** bitwire, and in separate modules, the libraries a
   transport needs.
 - **What it does not depend on.** The contract language (bittype), the adapters
-  (Bitlink), or Nightseam.
+  (bitlink), or nightseam.
 
 ## The primitive and tree contract
 
@@ -49,7 +49,7 @@ type WireTree = DeixisNode<Wire>;
 type DataTree = DeixisNode<Data>;
 ```
 
-Both trees have the same full Deixis structure: an own primitive, complete
+Both trees have the same full deixis structure: an own primitive, complete
 children keyed by exact bytes, partial path selection, decomposition and
 reconstruction. For a present path:
 
@@ -58,7 +58,7 @@ send(tree, path, message) = select(tree, path).own().send(message)
 read(tree, path)          = select(tree, path).own().read()
 ```
 
-`Wire` belongs to Bitwire; `Data` belongs to Bitstore. A `Data` is a reading
+`Wire` belongs to bitwire; `Data` belongs to bitstore. A `Data` is a reading
 capability. A materialized `DeixisNode<Bytes>` remains the codec snapshot, not
 the definition of `DataTree`.
 
@@ -92,12 +92,12 @@ enter only through the WebSocket packages. TypeScript uses one package,
 `@bitspark/bitruntime`, built at the repository root with the subpaths
 `./core`, `./transports`, `./engine` and `./dispatch`, so the received context
 its components share stays private to the package. (v0.1.0 shipped the
-structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public Bitwire 0.3.0 contract. Releases
+structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public bitwire 0.3.0 contract. Releases
 publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
 registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 
-The generic core uses Bitwire's native node declarations. TypeScript accepts
-Bitstore's matching structural node type directly; Go requires an explicit
+The generic core uses bitwire's native node declarations. TypeScript accepts
+bitstore's matching structural node type directly; Go requires an explicit
 adapter between the two packages' recursive node types. The shared semantic
 contract does not imply direct Go assignability.
 
@@ -108,7 +108,7 @@ contract does not imply direct Go assignability.
 - [Working here as an agent](AGENTS.md).
 - [Repository layout](LAYOUT.md) and the
   [interactive kickoff for the bitsystem3 migration](docs/bitsystem3-migration-kickoff.md).
-- [Bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
+- [bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
   and [the contract](https://github.com/Bitspark/bitwire/blob/main/docs/wire/contract.md).
 
 ## Source layout

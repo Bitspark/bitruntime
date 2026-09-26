@@ -1,20 +1,20 @@
-# Ported from Nightseam v0.6.0
+# Ported from nightseam v0.6.0
 
-The runtime path hand-written adapters use is ported from Nightseam
+The runtime path hand-written adapters use is ported from nightseam
 **v0.6.0**, commit `5cc9723a24646c40ed1861f892b2b23eb6d785d7` (tag `v0.6.0`).
 None of the 41 unreleased commits after it is ported: the six that touch the
 runtime rename types, fix a test's own race, or add the declared-composition API
-that Bitwire decision 0012 supersedes. The verbatim import is its own commit, so
+that bitwire decision 0012 supersedes. The verbatim import is its own commit, so
 every adaptation is visible as a diff; `NOTICE` records the provenance.
 
-`bitwire/1` is the behavior of that release (Bitwire decision 0008). The engine
+`bitwire/1` is the behavior of that release (bitwire decision 0008). The engine
 sends, accepts and refuses the same frames, with the same close codes, bounds and
 serial rules. The envelope vectors in `vectors/bitwire-1/` are that release's
 tables, byte for byte.
 
 ## Where each piece went
 
-| Nightseam v0.6.0 | bitruntime (Go) | TypeScript |
+| nightseam v0.6.0 | bitruntime (Go) | TypeScript |
 | --- | --- | --- |
 | `duplex/go` `Conn`, `Frame`, codes, `Pipe` | `transports/go` | `transports/ts` |
 | `duplex/go/ws` | `transports/websocket/go` | `transports/ts` (`webSocketConnection`) |
@@ -115,7 +115,7 @@ None changes a `bitwire/1` frame.
   Endpoint presents the protocol (research R20); a request whose method is not
   a canonical path encoding is answered `method_not_found`, as a v0.6.0 peer
   without that handler answers. Observer hooks and family labels are removed
-  until the engine's observation hooks are designed with Bitwire's
+  until the engine's observation hooks are designed with bitwire's
   received-context revision (charter §1).
 - **TypeScript.** The one closed classification is `PublicError` with code
   `disconnected`, keeping what ended the carrier as its `cause`: a send on a
@@ -145,7 +145,7 @@ None changes a `bitwire/1` frame.
   capability, so its caller gets `busy` without proof that nothing was
   published; v0.6.0's removed `Peer.Call` refused it synchronously. Whether a
   synchronous refusal must prove non-publication is research decision 4, still
-  open in Bitwire.
+  open in bitwire.
 - A local pair and a peer's root still end their carrier when a bounded queue
   overflows. The send whose overflow ended it reports `core.ErrBackpressure`
   with the closed classification; later sends report the carrier closed.

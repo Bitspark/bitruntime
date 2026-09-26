@@ -16,7 +16,7 @@ directory. Do not organize implementations as repository-root `go/` or `ts/`,
 
 Use exactly two lowercase letters: `go`, `ts`, `py`, `rs`, `hs`, `cc`,
 `jv`, `sw`; other assigned codes include `rb`, `kt`, `cs` and `sh`.
-Bitwire already uses `hs` for Haskell. Service SDKs and their source manifests
+bitwire already uses `hs` for Haskell. Service SDKs and their source manifests
 also follow their own language registry; register a code there before using it.
 
 Source, native tests and language-specific package metadata belong with the

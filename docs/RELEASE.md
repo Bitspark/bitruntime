@@ -1,7 +1,7 @@
 # bitruntime v0.2.0
 
 The runtime path that hand-written adapters use, in Go and TypeScript, over
-the public **Bitwire 0.3.0** contract, speaking the protocol revision
+the public **bitwire 0.3.0** contract, speaking the protocol revision
 **`bitwire/1`**:
 
 - **core:** the structural core of v0.1.0 (trees, selection, decomposition,
@@ -15,8 +15,8 @@ the public **Bitwire 0.3.0** contract, speaking the protocol revision
 - **dispatch:** the dispatcher and the `Call`, `Emit`, `Handle` and `Register`
   helpers (`call`, `emit`, `handle`, `register`, `onEvent`).
 
-It is ported from Nightseam v0.6.0 (`5cc9723`), with provenance in `NOTICE` and
-every change in [the port record](port-from-nightseam.md). Nightseam's recorded
+It is ported from nightseam v0.6.0 (`5cc9723`), with provenance in `NOTICE` and
+every change in [the port record](port-from-nightseam.md). nightseam's recorded
 defects in this path are fixed rather than ported: queued refusals are answered
 when a pair closes (nightseam#722), a pair's pending slot is free before its
 caller holds the answer (nightseam#658), ended carriers answer `disconnected`,
@@ -25,11 +25,11 @@ message, and a closing peer's code reaches the far side.
 
 **Evidence**
 
-- `bitwire/1` is unchanged: bitruntime interoperates with Nightseam v0.6.0 in
+- `bitwire/1` is unchanged: bitruntime interoperates with nightseam v0.6.0 in
   every pairing of Go and TypeScript over real WebSockets, and sends the same
   bytes (`node scripts/interop.mjs`). The envelope tables of v0.6.0 are held by
   a running peer of each role.
-- Bitwire's independent cases, run from Bitwire's own test-only module against
+- bitwire's independent cases, run from bitwire's own test-only module against
   this release: lifecycle, composition groups, declared composites (reference
   realization; production gaps recorded) and trees, over the local pair and
   WebSockets in both directions.
@@ -46,4 +46,4 @@ npm registry.
 Not in this release: live references, tunnels, the framed byte stream
 `bitwire-stream/1`, observation and tracing hooks, authentication integration,
 and received-context evidence as a contract field, which awaits a later
-Bitwire revision.
+bitwire revision.

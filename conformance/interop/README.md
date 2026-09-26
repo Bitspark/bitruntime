@@ -1,22 +1,22 @@
-# Interoperability with Nightseam v0.6.0
+# Interoperability with nightseam v0.6.0
 
-Test-only evidence that bitruntime speaks `bitwire/1` as Nightseam v0.6.0 does.
-Bitwire decision 0008 defines `bitwire/1` as that release's behavior, so a
-bitruntime peer and a Nightseam v0.6.0 peer must serve each other in both roles,
+Test-only evidence that bitruntime speaks `bitwire/1` as nightseam v0.6.0 does.
+bitwire decision 0008 defines `bitwire/1` as that release's behavior, so a
+bitruntime peer and a nightseam v0.6.0 peer must serve each other in both roles,
 in both languages, and send the same bytes for the same exchange.
 
-Nightseam v0.6.0 compiles against Bitwire 0.2.0, whose `Wire` is path-taking,
-and bitruntime against Bitwire 0.3.0, so the two cannot share one Go binary. Each
+nightseam v0.6.0 compiles against bitwire 0.2.0, whose `Wire` is path-taking,
+and bitruntime against bitwire 0.3.0, so the two cannot share one Go binary. Each
 implementation is its own program, and they meet only over real WebSockets.
-The Nightseam programs are isolated in their own test-only modules and are never
+The nightseam programs are isolated in their own test-only modules and are never
 a dependency of a published package.
 
 | Program | Implementation |
 | --- | --- |
 | `bitruntime/go` | this repository's Go runtime |
 | `bitruntime/ts` | this repository's TypeScript runtime |
-| `nightseam/go` | Nightseam v0.6.0 Go (`github.com/Bitspark/nightseam v0.6.0`) |
-| `nightseam/ts` | Nightseam v0.6.0 TypeScript (`@nightseam/runtime` and `@nightseam/duplex` 0.6.0) |
+| `nightseam/go` | nightseam v0.6.0 Go (`github.com/Bitspark/nightseam v0.6.0`) |
+| `nightseam/ts` | nightseam v0.6.0 TypeScript (`@nightseam/runtime` and `@nightseam/duplex` 0.6.0) |
 
 ## The scenario
 
@@ -66,6 +66,6 @@ client against it, and compares the observations with this table.
 `recorder/go` is a raw WebSocket client that sends fixed envelopes to a server
 and records every frame the server sends back, answering the server's reverse
 request itself. The runner records each server and requires the bitruntime
-transcripts to equal the Nightseam transcripts of the same language byte for
+transcripts to equal the nightseam transcripts of the same language byte for
 byte, after masking only the random span identifiers a peer mints for its own
 requests.

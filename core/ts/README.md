@@ -1,12 +1,12 @@
 # @bitspark/bitruntime/core
 
-The TypeScript structural runtime for Bitwire 0.3.0, the `core` subpath of the
+The TypeScript structural runtime for bitwire 0.3.0, the `core` subpath of the
 `@bitspark/bitruntime` package (v0.1.0 shipped it as `@bitspark/bitruntime-core`).
 The same subpath also exports the addressed operators (`at`, `mount`,
 `forward`), the local `pair`, the invocation lifecycle, `PublicError`,
 `respond` and trace propagation, which docs/port-from-nightseam.md describes. It depends only on the
-public Bitwire contract and implements the common finite, acyclic, byte-keyed
-Deixis structure. It does not implement carriers, RPC, or receive/close ownership.
+public bitwire contract and implements the common finite, acyclic, byte-keyed
+deixis structure. It does not implement carriers, RPC, or receive/close ownership.
 
 ```ts
 import type { Message, Wire } from '@bitspark/bitwire';
@@ -41,7 +41,7 @@ Derived sending is exactly `select(tree, path).own().send(message)`. Missing
 selection throws `MissingPathError` without calling a primitive or falling back
 to an ancestor. Existing primitive refusals propagate unchanged. Message and
 return-capability identity are preserved. A supplied primitive implements
-Bitwire's admission and asynchronous dispatch rules; this structural operator
+bitwire's admission and asynchronous dispatch rules; this structural operator
 does not create a dispatch queue or await an application result.
 
 `asAddressed(tree)` grants the separate `AddressedWire` access interface.
@@ -53,6 +53,6 @@ profile. The adapter exposes no receiver or lifecycle access. There is no invers
 conversion from an opaque addressed router to a complete tree.
 
 Run `npm ci`, `npm run check`, and `npm test` at the repository root. The tests include an observation
-driver against Bitwire's independently maintained full-tree oracle from
+driver against bitwire's independently maintained full-tree oracle from
 `conformance/trees/expected.json` in contract 0.3.0, plus construction, identity,
 cycle, byte-key, deep traversal, refusal, and Unicode bridge checks.

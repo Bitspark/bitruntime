@@ -1,7 +1,7 @@
 # Data / DataTree and Wire / WireTree
 
 **Status: maintainer-selected contract, 2026-09-26; structural core implemented,
-carrier/runtime migration pending.** [Bitwire decision 0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md)
+carrier/runtime migration pending.** [bitwire decision 0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md)
 records the names and full structural obligation:
 
 ```ts
@@ -15,14 +15,14 @@ type WireTree = DeixisNode<Wire>;
 The earlier `End` primitive, preservation of addressed `Wire`, `ByteSource`
 naming, and `Bitdata = Deixis[Bytes]` as the public access model are superseded.
 They remain history in earlier discussions, including draft
-[Bitwire PR #49](https://github.com/Bitspark/bitwire/pull/49). New code must use
-the names above. [Bitwire #42](https://github.com/Bitspark/bitwire/issues/42)
+[bitwire PR #49](https://github.com/Bitspark/bitwire/pull/49). New code must use
+the names above. [bitwire #42](https://github.com/Bitspark/bitwire/issues/42)
 tracks interaction delivery; the shared structure is coordinated through
-[Deixis #49](https://github.com/Bitspark/deixis/issues/49).
+[deixis #49](https://github.com/Bitspark/deixis/issues/49).
 
 ## One complete structural contract
 
-Deixis defines `Node[T] = T × FiniteMap[Bytes, Node[T]]`. Both tree types have
+deixis defines `Node[T] = T × FiniteMap[Bytes, Node[T]]`. Both tree types have
 the same obligations, irrespective of whether an own primitive reads or sends:
 
 - an own value at every node, including nodes which also have children;
@@ -70,7 +70,7 @@ public, released, versioned and consistent with the affected charters.
 
 TypeScript's structural types let the generic core consume either family's
 matching node interface directly. Go's recursive return types retain package
-identity: Bitstore's `DeixisNode[Data]` needs an explicit adapter to Bitwire's
+identity: bitstore's `DeixisNode[Data]` needs an explicit adapter to bitwire's
 `DeixisNode[Data]` before using this runtime's generic operators. This release
 does not claim direct Go assignment or introduce a storage-to-interaction
 production dependency. The adapter must preserve the common structural laws.
@@ -145,10 +145,10 @@ reject adapters that collapse them.
 
 ## Ownership and protocol boundaries
 
-Bitwire owns `Wire`, `WireTree`, `AddressedWire`, their laws, native
-presentations and independent interaction cases. Bitstore owns `Data`,
-`DataTree` and persistence APIs. Deixis owns the generic structure, laws and
-codec. bitruntime implements the Bitwire contract; no new primitive repository
+bitwire owns `Wire`, `WireTree`, `AddressedWire`, their laws, native
+presentations and independent interaction cases. bitstore owns `Data`,
+`DataTree` and persistence APIs. deixis owns the generic structure, laws and
+codec. bitruntime implements the bitwire contract; no new primitive repository
 is needed. Existing `wire/go/` and `wire/ts/` presentations can hold the new
 types without inventing a module per type.
 
@@ -187,7 +187,7 @@ does not prove complete remote-tree access.
 
 The Go/TypeScript core now provides composition, selection, complete parts,
 derived sending and a local AddressedWire facade. It is independently checked
-against Bitwire's structural oracle. This is not a networking release.
+against bitwire's structural oracle. This is not a networking release.
 The [kickoff](bitsystem3-migration-kickoff.md) still requires remaining runtime
 implementation, independent carrier conformance, remote bridges, admission
 and lifecycle evidence, interoperable released packages, and the complete
