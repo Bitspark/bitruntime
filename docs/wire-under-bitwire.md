@@ -1,8 +1,13 @@
 # Exploration: Wire underneath Bitwire
 
 **Status: naming adopted on 2026-09-26; exact API design remains open.**
+**Naming revised the same day by the maintainer:** the addressless primitive is
+**`End`**, Deixis's word for what a party holds, and `Bitwire = Deixis[End]`.
+`bitwire.Wire` stays the addressed interface. This page originally called the
+primitive `Wire`; it now uses `End` throughout.
+
 The maintainer asked whether the direction could be stated as
-`Bitwire = Deixis[Wire]`, with an addressless Wire primitive underneath Bitwire.
+`Bitwire = Deixis[End]`, with an addressless primitive underneath Bitwire.
 The agreed counterpart is `Bitdata = Deixis[Bytes]`: structured interaction and
 structured data share the same Deixis construction. Bitstore names persistence.
 
@@ -14,11 +19,11 @@ levels Wire. It still needs a precise contract and crossing evidence.
 
 ## Both contracts in the Bitwire repository
 
-The target arrangement keeps both `Wire` and `Bitwire` in
-[`github.com/Bitspark/bitwire`](https://github.com/Bitspark/bitwire). `Wire`
-specifies addressless delivery; `Bitwire = Deixis[Wire]` specifies its structural,
-addressed construction. Their native interfaces, laws and independent cases
-belong together there. A separate repository for the Wire primitive is not
+The target arrangement keeps both `End` and `Bitwire` in
+[`github.com/Bitspark/bitwire`](https://github.com/Bitspark/bitwire). `End`
+specifies addressless delivery; `Bitwire = Deixis[End]` specifies its structural,
+addressed construction, presented natively as `bitwire.Wire`. Their native interfaces, laws and independent cases
+belong together there. A separate repository for the End primitive is not
 needed. bitruntime implements both; Deixis owns the generic structural model.
 
 They can initially be two native types in the existing `wire/go/` and
@@ -32,24 +37,24 @@ message/profile allocation and version transition to the design decision.
 ## The decomposition
 
 ```text
-Wire                         addressless sending access at one origin
-Bitwire = Deixis[Wire]        own Wire plus keyed child Bitwires
+End                          addressless sending access at one origin
+Bitwire = Deixis[End]         own End plus keyed child Bitwires (native type: Wire)
 RPC / typed adapters         operations, correlation, outcomes, domain types
 ```
 
 Deixis contributes structure, not execution policy:
 `Node[T] = T × FinMap[Bytes, Node[T]]`. For a fully declared local tree,
 instantiate T with an addressless sending capability. Every node has its own
-Wire, including a refusing Wire where no operation is offered at that position.
+End, including a refusing End where no operation is offered at that position.
 The node can also have named children.
 
 Conceptually, and without committing to public names:
 
 ```text
-Wire.send(message)                         -> admission or refusal
-Bitwire.at(path)                           -> selected Bitwire access
-Bitwire.origin()                           -> addressless Wire access
-Bitwire.send(path, message)                -> derived convenience operation
+End.send(message)                          -> admission or refusal
+Wire.at(path)                              -> selected Bitwire access
+Wire.origin()                              -> addressless End access
+Wire.send(path, message)                   -> derived convenience operation
 ```
 
 For an admitted, statically bound tree and a present path:
@@ -93,7 +98,7 @@ migration contract have not been delivered by those documents.
 
 ### A tree value is not the same thing as access to it
 
-For fully declared structures, `Deixis[Wire]` is literal. Public Bitwire access
+For fully declared structures, `Deixis[End]` is literal. Public Bitwire access
 is a capability to use such a structure, potentially remote or opaque. Sending
 access must not grant enumeration, decomposing parts, reassembly authority,
 receiver attachment or closure ownership.
@@ -102,7 +107,7 @@ An `origin()` operation on public access must preserve the selected view's
 interception and attenuation. It is addressless sending through that view, not
 an accessor that exposes the construction owner's unguarded raw capability.
 
-A finite tree of raw origin Wires alone cannot represent every current opaque
+A finite tree of raw origin Ends alone cannot represent every current opaque
 path-dispatching endpoint, such as one whose descendants are discovered on use.
 The contract must either state an admitted structural subset or provide explicit
 opaque subtree access and its binding laws. Treat that as an interpretation of
@@ -122,11 +127,11 @@ four-kind RPC profile; copying it unchanged would keep that profile commitment.
 Specify the minimal delivery/message contract explicitly. Request IDs,
 response/error interpretation and cancellation belong to the profile that needs
 them. A generic relay carries their representation without interpreting
-application operations. The Wire primitive need not become a TCP socket.
+application operations. The End primitive need not become a TCP socket.
 
 ### Replies and cancellation can be addressed capabilities too
 
-An ordinary reply can use an addressless Wire. A returned object with methods
+An ordinary reply can use an addressless End. A returned object with methods
 can expose Bitwire access. A profile that currently sends control operations to
 paths beneath a return origin must explicitly retain an addressed return
 capability, derive distinct raw capabilities for those operations, or define an
@@ -148,7 +153,7 @@ If a selected subtree or handler is replaced, a previously captured invocation
 must continue to address its original receiver. A late cancellation must not
 reach the replacement. Closing a borrowed parent view must not close every
 child. A runtime must bound both admitted work and retained routing/control
-state. None of these follows simply from `Deixis[Wire]`.
+state. None of these follows simply from `Deixis[End]`.
 
 ### Native APIs and the wire protocol can change independently
 
@@ -170,7 +175,7 @@ separate decisions.
 The maintainer selected **Bitdata** on 2026-09-26:
 
 ```text
-Bitwire = Deixis[Wire]       structured interaction
+Bitwire = Deixis[End]        structured interaction
 Bitdata = Deixis[Bytes]      structured byte content
 ```
 
@@ -182,7 +187,7 @@ Encoding, content identity and root management retain their explicit contracts
 in [Deixis #49](https://github.com/Bitspark/deixis/issues/49) and
 [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
 
-The same Deixis operations can lift Wire into addressed sending access and Bytes
+The same Deixis operations can lift End into addressed sending access and Bytes
 into addressed byte content. This shares key/path laws, own values, selection
 and reconstruction. It does not equate wire lifetime with storage durability,
 make live endpoints serializable, or identify arbitrary blob hashes as Deixis
@@ -195,7 +200,7 @@ space accesses:
 
 ```text
 space
-  own Wire: messages about this space's ID, facts and relationships
+  own End: messages about this space's ID, facts and relationships
   children[name]: Bitwire access to that child space
 ```
 
@@ -215,7 +220,8 @@ persist endpoints or deliver cross-host transactions.
 
 ## Recommendation to take into the kickoff
 
-Use the chosen names: `Wire` for A0, `Bitwire = Deixis[Wire]` for addressed A1,
+Use the chosen names: `End` for A0, `Bitwire = Deixis[End]` for addressed A1 (native
+type `bitwire.Wire`),
 and `Bitdata = Deixis[Bytes]` for structured data. Resolve the exact interfaces
 and package coordinates. Keep convenient addressed sending as a derived operation
 where useful. Use existing origin/composition observations as evidence, then
