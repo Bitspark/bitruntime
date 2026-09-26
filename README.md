@@ -1,33 +1,41 @@
 # bitruntime
 
 The Go and TypeScript implementation of the
-[Bitwire](https://github.com/Bitspark/bitwire) contract.
+[bitwire](https://github.com/Bitspark/bitwire) contract.
 
-**Status: structural core 0.1.0 implemented.** It provides
-full generic tree construction and selection, decomposition/reconstruction,
-derived sending and an explicit addressed-access adapter. See
-[Go](core/go/README.md) and [TypeScript](core/ts/README.md).
+**Status: the runtime path hand-written adapters use is implemented** (the next
+release after the structural core 0.1.0):
 
-Transports, carriers, the protocol engine, invocation lifecycle, dispatch,
-live references and tunnels remain planned under
-[Bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
-Consumer networking still uses frozen Nightseam v0.6.0 until that migration is
-delivered; the structural core is not a replacement carrier runtime.
+- **core:** full tree construction, selection, decomposition and derived
+  sending; the addressed operators `At`, `Mount` and `Forward`; the local pair;
+  the invocation lifecycle.
+- **transports:** the frame transport seam, the in-memory pipe and WebSocket.
+- **engine:** the `bitwire/1` protocol engine and WebSocket connection setup.
+- **dispatch:** the dispatcher and the `Call`, `Emit`, `Handle` and `Register`
+  helpers.
+
+The runtime is ported from nightseam v0.6.0 with its provenance in `NOTICE`, and
+fixes nightseam's recorded defects in this path; see
+[the port record](docs/port-from-nightseam.md). The engine interoperates with
+nightseam v0.6.0 peers in both roles and both languages and sends the same
+bytes (`node scripts/interop.mjs`). Live references, tunnels, the framed byte
+stream, telemetry and authentication integration remain planned under
+[bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
 
 ## Where it sits
 
 ```text
-bitruntime  →  Bitwire (the contract, the protocol and carrier specifications, conformance)
+bitruntime  →  bitwire (the contract, the protocol and carrier specifications, conformance)
 ```
 
-- **Bitwire** specifies addressless `Wire`, structural `WireTree`, and the
+- **bitwire** specifies addressless `Wire`, structural `WireTree`, and the
   separate `AddressedWire` carrier access contract. bitruntime implements them.
-- **Bitwire's conformance cases** judge bitruntime as an external implementation,
+- **bitwire's conformance cases** judge bitruntime as an external implementation,
   written from the specification and never recorded from this code.
-- **What bitruntime depends on.** Bitwire, and in separate modules, the libraries a
+- **What bitruntime depends on.** bitwire, and in separate modules, the libraries a
   transport needs.
 - **What it does not depend on.** The contract language (bittype), the adapters
-  (Bitlink), or Nightseam.
+  (bitlink), or nightseam.
 
 ## The primitive and tree contract
 
@@ -41,7 +49,7 @@ type WireTree = DeixisNode<Wire>;
 type DataTree = DeixisNode<Data>;
 ```
 
-Both trees have the same full Deixis structure: an own primitive, complete
+Both trees have the same full deixis structure: an own primitive, complete
 children keyed by exact bytes, partial path selection, decomposition and
 reconstruction. For a present path:
 
@@ -50,7 +58,7 @@ send(tree, path, message) = select(tree, path).own().send(message)
 read(tree, path)          = select(tree, path).own().read()
 ```
 
-`Wire` belongs to Bitwire; `Data` belongs to Bitstore. A `Data` is a reading
+`Wire` belongs to bitwire; `Data` belongs to bitstore. A `Data` is a reading
 capability. A materialized `DeixisNode<Bytes>` remains the codec snapshot, not
 the definition of `DataTree`.
 
@@ -68,14 +76,28 @@ and message/return-capability identity.
 
 ## Packages
 
-Go uses module `github.com/Bitspark/bitruntime` and package `core/go`.
-TypeScript uses `@bitspark/bitruntime-core` from `core/ts`. Both depend on the
-public Bitwire 0.3.0 contract. The initial release process publishes a root Go
-tag and a TypeScript tarball with checksums on GitHub; npm registry publication
-is not configured. Read [RELEASING.md](RELEASING.md) for validation and delivery.
+Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
 
-The generic core uses Bitwire's native node declarations. TypeScript accepts
-Bitstore's matching structural node type directly; Go requires an explicit
+| Package | Holds |
+| --- | --- |
+| `core/go` | Trees, `At`, `Mount`, `Forward`, `NewPair`, the invocation lifecycle, `Respond`, `PublicError` |
+| `transports/go` | The seam, `Pipe`, close codes and `Sendable`, the closed classification `ErrClosed` |
+| `transports/websocket/go` | The WebSocket transport |
+| `engine/go` | The `bitwire/1` `Peer` over any transport |
+| `engine/websocket/go` | `Accept`, `NewHandler` and `Dial` over WebSockets |
+| `dispatch/go` | `NewDispatcher`, `Call`, `Emit`, `Handle`, `Register` |
+
+A program links only the packages it imports; `coder/websocket` and `net/http`
+enter only through the WebSocket packages. TypeScript uses one package,
+`@bitspark/bitruntime`, built at the repository root with the subpaths
+`./core`, `./transports`, `./engine` and `./dispatch`, so the received context
+its components share stays private to the package. (v0.1.0 shipped the
+structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public bitwire 0.3.0 contract. Releases
+publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
+registry publication is not configured. Read [RELEASING.md](RELEASING.md).
+
+The generic core uses bitwire's native node declarations. TypeScript accepts
+bitstore's matching structural node type directly; Go requires an explicit
 adapter between the two packages' recursive node types. The shared semantic
 contract does not imply direct Go assignability.
 
@@ -86,7 +108,7 @@ contract does not imply direct Go assignability.
 - [Working here as an agent](AGENTS.md).
 - [Repository layout](LAYOUT.md) and the
   [interactive kickoff for the bitsystem3 migration](docs/bitsystem3-migration-kickoff.md).
-- [Bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
+- [bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
   and [the contract](https://github.com/Bitspark/bitwire/blob/main/docs/wire/contract.md).
 
 ## Source layout

@@ -16,7 +16,7 @@ directory. Do not organize implementations as repository-root `go/` or `ts/`,
 
 Use exactly two lowercase letters: `go`, `ts`, `py`, `rs`, `hs`, `cc`,
 `jv`, `sw`; other assigned codes include `rb`, `kt`, `cs` and `sh`.
-Bitwire already uses `hs` for Haskell. Service SDKs and their source manifests
+bitwire already uses `hs` for Haskell. Service SDKs and their source manifests
 also follow their own language registry; register a code there before using it.
 
 Source, native tests and language-specific package metadata belong with the
@@ -34,15 +34,20 @@ rewrite an immutable published release or bypass a frozen-foundation policy.
 
 ## Adoption in this repository
 
-The initial structural core is delivered in `core/{go,ts}`. Its Go module
-manifest stays at the root; TypeScript package metadata stays in `core/ts`.
-The next runtime milestone uses `transports/{go,ts}`, `engine/{go,ts}` and
-`dispatch/{go,ts}`. Later modules use the same shape:
-`live/{go,ts}`, `tunnel/{go,ts}`, `telemetry/{go,ts}` and
-`auth-integration/{go,ts}`. Those are intended paths, not delivered packages.
-Do not create empty language packages. The module/package coordinates and
-release process are specified in [RELEASING.md](RELEASING.md) for the core;
-later modules need their own explicit allocation before release.
+The runtime path is delivered in `core/{go,ts}`, `transports/{go,ts}`,
+`transports/websocket/go`, `engine/{go,ts}`, `engine/websocket/go` and
+`dispatch/{go,ts}`. The Go module manifest and the TypeScript package manifest
+both stay at the repository root, as build manifests of one release unit;
+sources, native tests and the packages' contents stay under each component's
+language directory. Shared, non-public machinery lives in
+`internal/<name>/go` and `core/ts/src/internal`. Language-neutral test data
+lives in `vectors/`, and test-only interoperability programs in
+`conformance/interop/<implementation>/<lang>`.
+
+Later modules use the same shape: `live/{go,ts}`, `tunnel/{go,ts}`,
+`telemetry/{go,ts}` and `auth-integration/{go,ts}`. Those are intended paths,
+not delivered packages. Do not create empty language packages. Record a later
+module's coordinates in [RELEASING.md](RELEASING.md) before it is released.
 
 Start the first consumer migration with the
 [kickoff prompt](docs/bitsystem3-migration-kickoff.md).

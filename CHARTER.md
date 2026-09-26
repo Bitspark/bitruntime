@@ -1,28 +1,28 @@
 # Charter
 
-[Bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md)
+[bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md)
 requires every new repository to open with answers to four questions. A
 repository owns an independently useful compatibility commitment. A module owns a
 coherent semantic decision.
 
 ## 1. What decisions does it own?
 
-How the Bitwire contract is implemented in Go and TypeScript, including the
+How the bitwire contract is implemented in Go and TypeScript, including the
 maintainer's `Wire` / `WireTree` naming decision:
 
 - module layout and package coordinates;
 - concurrency, buffering and backpressure strategy, and resource bounds within the
   carrier contract;
 - the engine's public hooks for context, observation and tracing. These are
-  designed together with Bitwire's received-context contract change.
-- which transports ship, following Bitwire decision 0009:
+  designed together with bitwire's received-context contract change.
+- which transports ship, following bitwire decision 0009:
   - the in-memory pipe;
   - WebSocket;
   - `bitwire-stream/1` over stdio, TCP and Unix sockets.
 - the live-reference mechanism and tunnels. They depend on stated capabilities (an
   Endpoint plus lifetime and scope), not on a concrete peer.
 - concrete full `WireTree` construction, partial selection, decomposition and
-  reconstruction, using Deixis's generic byte-keyed structural contract;
+  reconstruction, using deixis's generic byte-keyed structural contract;
 - derived sending through `select(tree, path).own().send(message)` and explicit
   adapters to the separate `AddressedWire` carrier access contract. An opaque
   router does not become a full tree merely by being wrapped or renamed.
@@ -30,15 +30,15 @@ maintainer's `Wire` / `WireTree` naming decision:
 It does **not** own:
 
 - the contract, the protocol, the carrier contract or the conformance expectations,
-  which are Bitwire's;
+  which are bitwire's;
 - declaration semantics or identity, which are bittype's;
-- adapters or the identity check, which are Bitlink's;
+- adapters or the identity check, which are bitlink's;
 - validation, which is bitschema's;
 - authority, which stays with its consumers.
 
 The naming across the two families is `WireTree = DeixisNode<Wire>` and
 `DataTree = DeixisNode<Data>`. `Wire.send(message)` is addressless;
-`Data.read()` reads bytes. Bitstore owns `Data` and `DataTree`, and Deixis owns
+`Data.read()` reads bytes. bitstore owns `Data` and `DataTree`, and deixis owns
 the common structure and laws. Materialized `DeixisNode<Bytes>` values remain
 the storage codec's snapshots. This charter does not move storage implementation
 into bitruntime.
@@ -53,17 +53,23 @@ capabilities remain separate from the native primitive rename.
 
 Each release states:
 
-- which Bitwire contract version it implements;
+- which bitwire contract version it implements;
 - which protocol revisions it implements (`bitwire/1`, …);
 - which conformance suite revision it passes.
 
-Modules are versioned independently. The first structural-core milestone uses
-one root Go module, `github.com/Bitspark/bitruntime`, with package `core/go`, and
-one TypeScript package, `@bitspark/bitruntime-core`, in `core/ts`. The initial
-root `v0.1.0` tag versions these two implementations together. Future components
-need their module boundaries recorded before joining this release unit or
-publishing separately. Before 1.0 there is no compatibility promise. There are
-no aliases or re-exports of Nightseam.
+Modules are versioned independently. The runtime path's components — core,
+transports, engine and dispatch — form one release unit: one root Go module,
+`github.com/Bitspark/bitruntime`, whose packages are `core/go`,
+`transports/go`, `transports/websocket/go`, `engine/go`, `engine/websocket/go`
+and `dispatch/go`, and one TypeScript package, `@bitspark/bitruntime`, with a
+subpath per component. Root tags version them together; `v0.1.0` released the
+structural core alone as `@bitspark/bitruntime-core`. They move together because
+the engine and the pair create the invocations and received context that
+dispatch reads, which the TypeScript package keeps private to itself. Later
+components (live references, tunnels, telemetry, authentication integration)
+record their module boundaries before joining this unit or publishing
+separately. Before 1.0 there is no compatibility promise. There are no aliases
+or re-exports of nightseam.
 
 The initial release process publishes Go through its source tag and TypeScript
 as a GitHub release tarball with checksums. Registry publication is separately
@@ -72,13 +78,16 @@ configured and cannot be inferred from the presence of a tarball. See
 
 ## 3. What independently written evidence checks the promise?
 
-- Bitwire's conformance cases, run against released bitruntime from a test-only
-  module in Bitwire.
-- The initial core runs its actual implementations against Bitwire's independent
+- bitwire's conformance cases, run against released bitruntime from a test-only
+  module in bitwire.
+- The initial core runs its actual implementations against bitwire's independent
   structural oracle as well as native edge cases. These observations do not
-  stand in for the still-pending carrier/runtime suites.
+  stand in for the carrier/runtime suites, which bitwire runs from its own
+  test-only module.
+- nightseam v0.6.0's `bitwire/1` tables, vendored byte for byte in
+  `vectors/bitwire-1`, and the byte-level transcripts of `scripts/interop.mjs`.
 - The portable byte vectors for `bitwire-stream/1`.
-- Interoperability runs against Nightseam v0.6.0 peers, until the last consumer
+- Interoperability runs against nightseam v0.6.0 peers, until the last consumer
   moves.
 - Deliberately unlawful implementations, which check that the cases reject
   violations.
@@ -106,11 +115,11 @@ more:
 | live | Scopes, bindings, owners and release for live references |
 | tunnel | Many channels over one connection |
 | telemetry (optional) | Observation and tracing adapters |
-| auth-integration (optional) | Wire-level authentication integration above Archon |
+| auth-integration (optional) | Wire-level authentication integration above archon |
 
 ## The first milestone
 
-bitsystem3 is the first consumer to move off Nightseam. It needs the path its
+bitsystem3 is the first consumer to move off nightseam. It needs the path its
 hand-written adapters use: carriers, dispatch, helpers, selection and connection
 setup.
 

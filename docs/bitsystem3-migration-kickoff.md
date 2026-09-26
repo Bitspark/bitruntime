@@ -6,7 +6,7 @@ from the bitruntime checkout. Read this entire document, then execute the work.
 ## Outcome
 
 Implement and land the first usable Go/TypeScript bitruntime milestone and move
-bitsystem3 completely off Nightseam. Carry the work through design resolution,
+bitsystem3 completely off nightseam. Carry the work through design resolution,
 implementation, independent validation, release where needed, consumer adoption,
 green pull requests and verified integration on the affected repositories' main
 branches. The main delivery issues are
@@ -22,8 +22,8 @@ routine implementation details, tests, branches, commits, PRs or delivery steps.
 Follow each repository's actual review and protection rules.
 
 The bounded milestone is the hand-written adapter path used by bitsystem3.
-Complete the supporting Bitwire contract/conformance work it needs. Later
-generated consumers, live/tunnel migrations and the rest of Nightseam's
+Complete the supporting bitwire contract/conformance work it needs. Later
+generated consumers, live/tunnel migrations and the rest of nightseam's
 retirement remain separately tracked; do not silently expand this session to
 all of them.
 
@@ -39,7 +39,7 @@ Inspect current local and remote state, uncommitted work, active branches, open
 PRs, issue comments and dependency versions. Read each repository's AGENTS.md,
 contribution/release guidance and local LAYOUT.md before touching it.
 
-Read this repository's CHARTER.md and, in Bitwire:
+Read this repository's CHARTER.md and, in bitwire:
 - decisions 0006, 0007, 0008, 0009, 0010 and especially
   [0012](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0012-explicit-data-and-wire-trees.md);
 - the current Wire/WireTree/AddressedWire, profile, composition and carrier
@@ -50,25 +50,25 @@ Read this repository's CHARTER.md and, in Bitwire:
 
 Also read the coordination issues
 [bitruntime #2](https://github.com/Bitspark/bitruntime/issues/2),
-[Bitwire #47](https://github.com/Bitspark/bitwire/issues/47),
-[Nightseam #725](https://github.com/Bitspark/nightseam/issues/725) and
+[bitwire #47](https://github.com/Bitspark/bitwire/issues/47),
+[nightseam #725](https://github.com/Bitspark/nightseam/issues/725) and
 [bitsystem3 #8](https://github.com/Bitspark/bitsystem3/issues/8).
 Review bitsystem3's actual adapters, CLI, browser client, docs/bitwire.md and the
 applied decisions at the end of research-docs/0001-carrier-stack-home.md.
-Earlier research advice and Bitverse's historical architecture are evidence, not
+Earlier research advice and bitverse's historical architecture are evidence, not
 authority overriding decision 0010 and current charters.
 
-The architecture is decided: **Bitwire specifies and independently checks;
-bitruntime implements.** Bitwire must not gain a production dependency on
-bitruntime or Nightseam. bittype owns the new wire-independent language;
-bitschema owns validation; Bitlink owns adapters and their generation.
+The architecture is decided: **bitwire specifies and independently checks;
+bitruntime implements.** bitwire must not gain a production dependency on
+bitruntime or nightseam. bittype owns the new wire-independent language;
+bitschema owns validation; bitlink owns adapters and their generation.
 
 The primitive/tree API and naming are settled; remaining runtime and lifecycle
 choices must be resolved against that contract.
 
 Read [Data / DataTree and Wire / WireTree](wire-under-bitwire.md). The final
 maintainer decision on 2026-09-26 supersedes the earlier `End` proposal and draft
-[Bitwire PR #49](https://github.com/Bitspark/bitwire/pull/49):
+[bitwire PR #49](https://github.com/Bitspark/bitwire/pull/49):
 
 ```ts
 interface Data { read(): Promise<Bytes>; }
@@ -78,7 +78,7 @@ type DataTree = DeixisNode<Data>;
 type WireTree = DeixisNode<Wire>;
 ```
 
-Both are full Deixis structures: own value, complete exact-byte-keyed children,
+Both are full deixis structures: own value, complete exact-byte-keyed children,
 partial `at(path)`, decomposition and reconstruction. For a present path:
 
 ```text
@@ -86,11 +86,11 @@ read(tree, path)          = select(tree, path).own().read()
 send(tree, path, message) = select(tree, path).own().send(message)
 ```
 
-Bitstore owns Data/DataTree. A materialized `DeixisNode<Bytes>` remains the
+bitstore owns Data/DataTree. A materialized `DeixisNode<Bytes>` remains the
 codec snapshot, not the public DataTree capability type. Storage work remains
 with its workstreams and does not enlarge this networking milestone.
 
-Bitwire owns `Wire` and `WireTree`; bitruntime implements them. The old
+bitwire owns `Wire` and `WireTree`; bitruntime implements them. The old
 path-taking interface is explicitly `AddressedWire`, never an alias for
 `WireTree`. `Endpoint` extends `AddressedWire` and `ReturnAddress` retains that
 access for immutable `bitwire/1` profile behavior. An opaque addressed router
@@ -114,20 +114,20 @@ them with a documented version boundary:
   cancellation, invocation lifetime, path selection and endpoint ownership.
 - Exact-byte-key adaptation, explicitly admitted remote structures, partial
   selection behavior and retained-parts authority. Reconcile
-  [Deixis #49](https://github.com/Bitspark/deixis/issues/49),
+  [deixis #49](https://github.com/Bitspark/deixis/issues/49),
   [deixis-svc #1](https://github.com/Bitspark/deixis-svc/issues/1),
   [bitwire-svc #9](https://github.com/Bitspark/bitwire-svc/issues/9) and
   [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
   DataTree and WireTree must use the same full structural contract; a generic
   relay does not acquire application interpretation. It must not advertise an
   opaque router as a fully inspectable tree.
-  Record any shared Deixis library dependency and reconcile it with the charters.
+  Record any shared deixis library dependency and reconcile it with the charters.
 - Public lifecycle facilities: admission, capture, cancellation, actual body
   completion, control drain and retirement are distinct. A timeout does not
   retire executing work. Do not require concrete-peer access or a shared private
   ledger to prove cross-endpoint behavior.
 - Unforgeable received-context evidence and the engine's context/observation
-  hooks, designed together with the relevant Bitwire contract revision.
+  hooks, designed together with the relevant bitwire contract revision.
 - Carrier close/error classification, sendable versus observation-only close
   codes, buffering/backpressure bounds and exact package/module coordinates.
 
@@ -154,7 +154,7 @@ bitruntime/
   docs/
 ```
 
-Shared vectors and specifications may remain language-neutral. Bitwire owns
+Shared vectors and specifications may remain language-neutral. bitwire owns
 independent expected behavior; implementation tests here do not replace it.
 Optional later modules follow the same rule: live, tunnel, telemetry and
 auth-integration each have go/ and ts/ implementations when delivered.
@@ -176,9 +176,9 @@ recorded exceptions.
 
 ## Implementation and evidence
 
-Start from identified Nightseam source commits. The accepted v0.6.0 protocol
+Start from identified nightseam source commits. The accepted v0.6.0 protocol
 baseline is commit 5cc9723a24646c40ed1861f892b2b23eb6d785d7; verify its tag
-and provenance. Distinguish it from unreleased Nightseam improvements. Record
+and provenance. Distinguish it from unreleased nightseam improvements. Record
 ported source and modifications in NOTICE. Add no compatibility aliases,
 re-exports, local replace directives or sibling-checkout build dependencies.
 
@@ -187,7 +187,7 @@ explicit AddressedWire bridges, forwarding/local pairs, frame transports
 and WebSocket, the bitwire/1 peer and dial/accept setup, and dispatch/request/
 response/event helpers in Go and TypeScript. Port only what the milestone needs
 and fix the recorded defects in that path, especially
-[Nightseam #722](https://github.com/Bitspark/nightseam/issues/722):
+[nightseam #722](https://github.com/Bitspark/nightseam/issues/722):
 queued refusals must not disappear when a pair closes.
 Review the lifecycle observations in #658 as well. Keep other #720–#724 defects
 attached to their relevant successor modules; do not claim a tunnel or live
@@ -202,11 +202,11 @@ Hold these distinctions throughout:
 - Contract changes update their native presentations and independent cases,
   including the other delivered languages where meaning changes; Go/TS runtime
   delivery alone is not eight-language runtime conformance.
-- Independent expected observations come from the specification. Run Bitwire's
+- Independent expected observations come from the specification. Run bitwire's
   cases against released bitruntime in a separate test-only module. Include
   unlawful implementations to show the cases reject real violations.
 - Exercise local pairs and WebSocket across Go/Go, TS/TS and both cross-language
-  directions, plus interoperability with actual Nightseam v0.6.0 peers.
+  directions, plus interoperability with actual nightseam v0.6.0 peers.
 - Verify path composition/remounting, retained child access, identity, local
   context/received evidence, reverse calls, cancellation and bounded overload.
   Where lifecycle acceptance requires two independent endpoint implementations
@@ -220,14 +220,14 @@ Hold these distinctions throughout:
 Publish the smallest complete module set through the configured release process.
 Check module coordinates, version tags, provenance and fresh external installs;
 pin released dependencies in consumers. A workspace-only green build is not
-release evidence. Keep any historical Nightseam interop dependency isolated to
+release evidence. Keep any historical nightseam interop dependency isolated to
 test-only fixtures, outside published production dependencies.
 
 ## Move bitsystem3 and prove it remains the same live model
 
 Update all Go and TypeScript imports, manifests and lockfiles in one coherent
 consumer adoption. Cover the server, CLI, api/ts and browser conformance fixtures.
-Audit go.mod/go.sum and package.json/package-lock.json for remaining Nightseam
+Audit go.mod/go.sum and package.json/package-lock.json for remaining nightseam
 dependencies or alias shims.
 
 Preserve the space model: persistent ID, local facts, parent and name-to-child
@@ -240,7 +240,7 @@ scope when selecting, mounting, remounting or retaining a child. Document what
 the migration actually enables; the common abstraction does not by itself
 provide distributed storage, cross-host transactions or authority propagation.
 
-Keep the frontend/backend/PostgreSQL Docker setup and Logos DB persistence.
+Keep the frontend/backend/PostgreSQL Docker setup and logos DB persistence.
 Planning, goals and inference remain outside this milestone. PostgreSQL keeps
 its normal database protocol. Preserve persist-before-acknowledge/publish and
 the handling of uncertain commits; never replay a mutation merely because a
@@ -274,7 +274,7 @@ foundation as a side effect of this migration.
 
 Update the milestone and coordination issues with exact commits, dependency
 versions, checks and remaining scope. Close only issues whose acceptance is
-demonstrated. Do not close the wider Nightseam-retirement or A0/A1 epics just
+demonstrated. Do not close the wider nightseam-retirement or A0/A1 epics just
 because the bitsystem3 milestone passes.
 
 Finish with the landed commits/PRs, published module versions, conformance

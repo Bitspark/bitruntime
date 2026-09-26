@@ -1,0 +1,30 @@
+{
+  "name": "@bitspark/bitruntime",
+  "version": "0.2.0",
+  "description": "The TypeScript implementation of the Bitwire contract: trees, addressed operators, the local pair, dispatch, the bitwire/1 protocol engine and its transports.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/Bitspark/bitruntime.git", "directory": "" },
+  "exports": {
+    "./core": { "types": "./dist/core/ts/src/index.d.ts", "import": "./dist/core/ts/src/index.js" },
+    "./transports": { "types": "./dist/transports/ts/src/index.d.ts", "import": "./dist/transports/ts/src/index.js" },
+    "./engine": { "types": "./dist/engine/ts/src/index.d.ts", "import": "./dist/engine/ts/src/index.js" },
+    "./dispatch": { "types": "./dist/dispatch/ts/src/index.d.ts", "import": "./dist/dispatch/ts/src/index.js" }
+  },
+  "files": ["dist", "README.md", "LICENSE", "NOTICE"],
+  "sideEffects": false,
+  "engines": { "node": ">=22.12.0" },
+  "publishConfig": { "registry": "https://registry.npmjs.org", "access": "public" },
+  "scripts": {
+    "check": "tsc -p tsconfig.check.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "test": "npm run build && node --test --test-timeout=30000 \"core/ts/test/*.test.mjs\" \"*/ts/test/*.test.ts\""
+  },
+  "dependencies": { "@bitspark/bitwire": "0.3.0" },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.3",
+    "ws": "8.21.3"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "description": "Request serials, as raw text: a frame published first on the connection and the request that follows it on the same direction, and whether the receiver admits that second request. Each row is a sequence, not a judgement about one envelope — the frames are each well formed, and what is judged is the order they arrive in. Structural validity is tables/frames.json. The harness sends before, then frame, over a raw connection to a peer of the named role, and holds that the peer ended with 4011, or did not.",
+  "rows": [
+    {
+      "name": "a serial lower than the one before it",
+      "to": "server",
+      "before": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:5\",\"method\":\"echo\",\"params\":1}",
+      "frame": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:3\",\"method\":\"echo\",\"params\":1}",
+      "valid": false,
+      "why": "a serial not greater than the previous request’s is a protocol violation (#439)"
+    },
+    {
+      "name": "a serial equal to the one before it",
+      "to": "server",
+      "before": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:5\",\"method\":\"echo\",\"params\":1}",
+      "frame": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:5\",\"method\":\"echo\",\"params\":1}",
+      "valid": false,
+      "why": "greater, not greater-or-equal: equal serials leave a later control ambiguous (#439)"
+    },
+    {
+      "name": "the first serial of a direction, lower than the other role’s",
+      "to": "server",
+      "before": "{\"version\":1,\"kind\":\"response\",\"id\":\"s:4\",\"result\":null}",
+      "frame": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:1\",\"method\":\"echo\",\"params\":1}",
+      "valid": true,
+      "why": "serials are per direction: the other role’s ids do not advance this mark (#439)"
+    },
+    {
+      "name": "a serial that leaves a gap",
+      "to": "server",
+      "before": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:2\",\"method\":\"echo\",\"params\":1}",
+      "frame": "{\"version\":1,\"kind\":\"request\",\"id\":\"c:9\",\"method\":\"echo\",\"params\":1}",
+      "valid": true,
+      "why": "gaps are allowed: a reservation that never published still spent its serial (#439)"
+    }
+  ]
+}
