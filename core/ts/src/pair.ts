@@ -1,4 +1,4 @@
-import type { AddressedWire, Endpoint, Message, Path, Receiver, ReturnAddress } from '@bitspark/bitwire';
+import type { AddressedWire, Endpoint, Message, Path, ProfileFrame, Receiver, ReturnAddress } from '@bitspark/bitwire';
 import { PublicError, ReceiverExistsError } from './error.ts';
 import { Invocation, defaultInvocationLimits } from './invocation.ts';
 import {
@@ -13,7 +13,7 @@ import {
 import { ended, profileFrame, publicError } from './internal/frame.ts';
 import { LIMIT_DEFAULTS, limits } from './internal/limits.ts';
 import { encodePath } from './internal/path.ts';
-import { traceOf } from './internal/trace.ts';
+import { traceMembers, traceOf } from './internal/trace.ts';
 import { respond } from './respond.ts';
 import { defaultPropagator, type Propagator } from './trace.ts';
 
@@ -343,6 +343,24 @@ export function pair(options: PairOptions = {}): [Endpoint, Endpoint] {
               try {
                 message.return!.wire.send([], { frame: checked });
               } catch (error) {
+                // The caller's own return capability can refuse what this pair
+                // admitted, such as a reply over a smaller frame limit further
+                // back. The call is already answered here, so the caller gets
+                // the bounded internal error directly rather than waiting for
+                // its deadline.
+                try {
+                  message.return!.wire.send([], {
+                    frame: {
+                      version: 1,
+                      kind: 'response',
+                      id: frame.id,
+                      error: { code: 'internal', message: 'Response could not be encoded' },
+                      ...traceMembers(traceOf(checked)),
+                    } as ProfileFrame,
+                  });
+                } catch {
+                  /* The caller cannot take even the bounded answer. */
+                }
                 throw error instanceof PublicError ? publicError(error) : error;
               }
             },

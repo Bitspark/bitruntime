@@ -547,5 +547,18 @@ func (r *localReturn) Send(path []string, message wire.Message) (err error) {
 			err = errors.New("bitruntime: wire return failed")
 		}
 	}()
-	return WithoutUnpublishedProof(r.call.key.address.Wire.Send(path, message))
+	if err := r.call.key.address.Wire.Send(path, message); err != nil {
+		// The caller's own return capability can refuse what this pair
+		// admitted, such as a reply over a smaller frame limit further back.
+		// The call is already answered here, so the caller gets the bounded
+		// internal error directly rather than waiting for its deadline.
+		fallback := wire.Message{Frame: wire.ProfileFrame{Version: 1, Kind: wire.ProfileResponse, ID: message.Frame.ID,
+			Error:       &wire.ProfileError{Code: "internal", Message: "Response could not be encoded"},
+			Traceparent: message.Frame.Traceparent, Tracestate: message.Frame.Tracestate}}
+		if r.call.key.address.Wire.Send(nil, fallback) == nil {
+			return &PublicError{Code: "internal", Message: "Response could not be encoded"}
+		}
+		return WithoutUnpublishedProof(err)
+	}
+	return nil
 }

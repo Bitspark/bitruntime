@@ -187,7 +187,15 @@ export function webSocketConnection(socket: WebSocketLike): FrameConnection {
     },
     close(code = CODE_NORMAL, reason = '') {
       refuseUnsendable(code);
-      socket.close(code, reason);
+      try {
+        socket.close(code, reason);
+      } catch {
+        // The browser WebSocket API accepts only 1000 and 3000–4999 and a
+        // reason of at most 123 bytes. A code or reason it refuses must not
+        // leave the connection open: close without them, and the far side
+        // observes no status (1005).
+        socket.close();
+      }
     },
     listen(handlers) {
       listeners.add(handlers);

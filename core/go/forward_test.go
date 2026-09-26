@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	core "github.com/Bitspark/bitruntime/core/go"
 	dispatch "github.com/Bitspark/bitruntime/dispatch/go"
@@ -201,5 +203,42 @@ func TestForwardWireCarriesUnknownPathsAndReverseCallsAcrossPeers(t *testing.T) 
 		if err := peer.Err(); err != nil {
 			t.Fatalf("forward detach closed peer: %v", err)
 		}
+	}
+}
+
+// TestAReplyRefusedFurtherBackReachesTheCaller: caller → pair A (small frames)
+// → Forward → pair B → handler. B admits the reply, and A's return capability
+// refuses it for its size. The caller gets the bounded internal error at once,
+// not its deadline.
+func TestAReplyRefusedFurtherBackReachesTheCaller(t *testing.T) {
+	caller, forwardA, err := core.NewPair(core.PairOptions{MaxFrameBytes: 600, RequestTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer caller.Close(transports.CodeNormal, "")
+	forwardB, handler, err := core.NewPair(core.PairOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer forwardB.Close(transports.CodeNormal, "")
+	stop, err := core.Forward(forwardA, forwardB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	d, err := dispatch.NewDispatcher(handler)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dispatch.Handle(d, []string{"big"}, func(context.Context, json.RawMessage) (any, error) {
+		return strings.Repeat("x", 2000), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	err = dispatch.Call(context.Background(), caller, []string{"big"}, nil, nil, dispatch.CallOptions{Timeout: 10 * time.Second})
+	var public *core.PublicError
+	if !errors.As(err, &public) || public.Code != "internal" || time.Since(started) > 5*time.Second {
+		t.Fatalf("the caller got %v after %v", err, time.Since(started))
 	}
 }

@@ -325,8 +325,7 @@ export class Peer {
     } catch (error) {
       return Promise.reject(new UnpublishedError(error));
     }
-    if (!this.isOpen())
-      return Promise.reject(new UnpublishedError(new PublicError('not_connected', 'Peer is not connected.')));
+    if (!this.isOpen()) return Promise.reject(new UnpublishedError(this.notOpen()));
     if (options.signal?.aborted)
       return Promise.reject(new UnpublishedError(new PublicError('cancelled', 'Call was cancelled before sending.')));
     if (this.pending.size >= this.limits.maxPendingRequests) {
@@ -410,6 +409,12 @@ export class Peer {
     return this.state === 'connected' && this.connection?.state === 'open';
   }
 
+  /** Why a send is refused while the peer is not open: a connected peer whose
+   * connection is closing has ended (R26); one that never connected has not. */
+  private notOpen(): PublicError {
+    return this.state === 'connected' ? ended() : new PublicError('not_connected', 'Peer is not connected.');
+  }
+
   private takePending(id: string): Pending | undefined {
     const pending = this.pending.get(id);
     if (!pending) return;
@@ -432,7 +437,7 @@ export class Peer {
     const ticket = envelope.kind === 'request' ? this.nextTicket++ : undefined;
     if (ticket !== undefined) this.publishing.push(ticket);
     try {
-      if (!this.isOpen()) throw new PublicError('not_connected', 'Peer is not connected.');
+      if (!this.isOpen()) throw this.notOpen();
       let text: string;
       try {
         text = JSON.stringify(envelope, (_key, value: unknown) => {
@@ -459,8 +464,7 @@ export class Peer {
       const deadline = Date.now() + this.limits.writeTimeoutMs;
       for (;;) {
         if (abandoned?.aborted) return;
-        if (!this.isOpen() || this.connection !== connection)
-          throw new PublicError('not_connected', 'Peer is not connected.');
+        if (!this.isOpen() || this.connection !== connection) throw this.notOpen();
         // The queue is the one ordering gate: room alone is not enough, the
         // sender must also be the one whose turn it is. That is what keeps
         // publication in the order senders reserved, which the request serial
@@ -485,8 +489,7 @@ export class Peer {
         });
         if (!room) {
           if (abandoned?.aborted) return;
-          if (!this.isOpen() || this.connection !== connection)
-            throw new PublicError('not_connected', 'Peer is not connected.');
+          if (!this.isOpen() || this.connection !== connection) throw this.notOpen();
           endOnRefusal = true;
           throw new PublicError('busy', 'Output consumer is stalled; queue limit reached.');
         }

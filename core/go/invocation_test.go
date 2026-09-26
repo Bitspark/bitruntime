@@ -213,8 +213,8 @@ func TestIndependentEndpointParticipatesThroughThePublicVocabulary(t *testing.T)
 		t.Fatal("no outcome")
 	}
 	waitRetired(t, invocation)
-	if endpoint.retirements.Load() != 1 {
-		t.Fatalf("retirements: %d", endpoint.retirements.Load())
+	if got := waitRetirements(endpoint, 1); got != 1 {
+		t.Fatalf("retirements: %d", got)
 	}
 }
 
@@ -405,7 +405,7 @@ func TestSequentialCompletionsBeyondCapacityRetainNothing(t *testing.T) {
 			continue
 		}
 	}
-	if got := endpoint.retirements.Load(); got != 32 {
+	if got := waitRetirements(endpoint, 32); got != 32 {
 		t.Fatalf("retirements after 32 sequential completions: %d", got)
 	}
 }
@@ -491,6 +491,18 @@ func (b *bareReturn) Send(path []string, message wire.Message) error {
 	b.uses.Add(1)
 	b.answer(message)
 	return nil
+}
+
+// waitRetirements waits for the onRetired callbacks, which run after an
+// invocation reports Retired, outside its lock, and returns their count.
+func waitRetirements(endpoint *invocationEndpoint, want int64) int64 {
+	for range 500 {
+		if got := endpoint.retirements.Load(); got >= want {
+			return got
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	return endpoint.retirements.Load()
 }
 
 func waitRetired(t *testing.T, invocation *core.Invocation) {

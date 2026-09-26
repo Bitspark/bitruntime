@@ -98,6 +98,10 @@ None changes a `bitwire/1` frame.
   and the engine fails its connection when even that does not fit, as v0.6.0's
   raw response path did. Through v0.6.0's root the remote caller waited for its
   deadline.
+- **A reply refused further back still reaches its caller.** When a pair has
+  admitted a reply that its caller's return capability then refuses, such as
+  one over a smaller frame limit before a forwarder, the caller gets the
+  bounded `internal` error instead of waiting for its deadline.
 - **Observe-only close codes (R27).** `transports.Sendable` separates codes that
   may be sent from 1005, 1006 and 1015. Transports refuse the latter with
   `ErrUnsendableCode`; a peer asked to close with one aborts instead.
@@ -130,7 +134,13 @@ None changes a `bitwire/1` frame.
   a request's frame arrived with rather than what a propagator placed on the
   handler's context, and local structured frames omit an empty trace member,
   as the peer's own frames always did; v0.6.0's root refused its own response
-  to a request that carried a `tracestate` alone.
+  to a request that carried a `tracestate` alone. A WebSocket connection whose
+  platform refuses a close code (a browser accepts only 1000 and 3000–4999)
+  closes without one rather than staying open. A connected peer whose
+  connection is closing reports `disconnected`, and an emit that races the
+  close no longer ends the peer before the far side's close code arrives. A
+  dispatcher keeps its endpoint in a `#private` field, so a handler's context
+  cannot reach it.
 
 ## Kept as v0.6.0 behaved
 

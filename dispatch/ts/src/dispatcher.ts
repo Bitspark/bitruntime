@@ -38,11 +38,13 @@ export class Dispatcher implements Registry {
   private readonly prefixes = new Map<string, Registration>();
   private ended = false;
   private detach: (() => void) | undefined;
-  private readonly root: Endpoint;
+  // Truly private: a handler holds this dispatcher as its context.wire, and
+  // must not reach the carrier behind it.
+  readonly #root: Endpoint;
   private readonly ownEndpoint: boolean;
 
   constructor(root: Endpoint, options: DispatcherOptions = {}) {
-    this.root = root;
+    this.#root = root;
     this.ownEndpoint = options.ownEndpoint ?? false;
     const detach = root.receive({
       message: (path, message) => this.deliver(path, message),
@@ -56,7 +58,7 @@ export class Dispatcher implements Registry {
   }
   send(path: Path, message: Message): void {
     if (this.ended) throw disconnected();
-    this.root.send(path, message);
+    this.#root.send(path, message);
   }
   /** Routes exactly path to receiver. A path has one registration. */
   register(path: Path, receiver: Receiver): () => void {
@@ -164,7 +166,7 @@ export class Dispatcher implements Registry {
         /* Each owner receives its end. */
       }
     }
-    if (this.ownEndpoint) this.root.close(code, reason);
+    if (this.ownEndpoint) this.#root.close(code, reason);
   }
 }
 /** Attaches a dispatcher to an endpoint, borrowed unless the options transfer its closure. */

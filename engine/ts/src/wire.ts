@@ -170,7 +170,12 @@ export function rootWire(peer: Peer, options: RootOptions): Endpoint {
         // Invoke admission now, in wire order; only completion is asynchronous.
         void options
           .emit(name, frame.data, { meta: frame.meta ? { ...frame.meta } : undefined }, outgoingTrace(frame))
-          .catch((error: unknown) => options.fail(publicError(error)));
+          .catch((error: unknown) => {
+            // A peer whose connection is closing is ending already; its close
+            // brings the remote's code and reason, which failing here would lose.
+            const refused = publicError(error);
+            if (refused.code !== 'disconnected') options.fail(refused);
+          });
         continue;
       }
       if (frame.kind !== 'request') continue;
