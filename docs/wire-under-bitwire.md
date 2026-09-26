@@ -188,6 +188,11 @@ contract can be components of Bitwire's specification repository; bitruntime
 implements them, and the structural core remains Deixis's. Use component/language
 paths for any resulting components.
 
+Using a shared Deixis implementation may introduce a library dependency that the
+current charters do not name. Record the resulting dependency graph and any
+charter amendment explicitly. The mathematical construction alone neither
+requires a particular package dependency nor authorizes adding one silently.
+
 The decision record should compare this proposal with making the public Bitwire
 surface itself addressless. State the public names, admitted structures, ownership,
 message/profile allocation, required version transitions and consumer mapping.

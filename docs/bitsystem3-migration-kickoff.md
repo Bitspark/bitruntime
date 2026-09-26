@@ -78,6 +78,7 @@ version boundary:
   [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
   Wire and Bytes must use the same structural contract; a generic relay does not
   acquire application interpretation.
+  Record any shared Deixis library dependency and reconcile it with the charters.
 - Public lifecycle facilities: admission, capture, cancellation, actual body
   completion, control drain and retirement are distinct. A timeout does not
   retire executing work. Do not require concrete-peer access or a shared private
