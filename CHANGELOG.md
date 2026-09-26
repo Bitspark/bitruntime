@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Record the chosen naming pair, Bitwire = Deixis[Wire] and Bitdata =
+  Deixis[Bytes], in the exploration and migration kickoff; keep Bitstore's
+  persistence role and the remaining API decisions explicit.
+
 - Make the explored Wire/Bitwire split explicit within the same Bitwire contract
   repository, and preserve attenuation when selecting an origin's send access.
 
