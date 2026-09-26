@@ -634,10 +634,9 @@ func TestRequestsQueuedInTheRootAreAnsweredWhenThePeerEnds(t *testing.T) {
 	_ = peer.Close()
 	close(first.release)
 
-	// The request already handed to the peer is answered by its own waiter.
-	// Which code it carries is a race inherited from v0.6.0: the waiter's
-	// context derives from the peer's, which ends at the moment the peer does,
-	// so it reads either the end (disconnected) or its context (cancelled).
+	// The request already handed to the peer is answered by its own waiter,
+	// disconnected: its context derives from the peer's, but the peer's end is
+	// not a withdrawal. v0.6.0 answered cancelled or disconnected at random.
 	answers := map[string]bool{}
 	for range 2 {
 		f := receive(t, first.responses)
@@ -646,7 +645,7 @@ func TestRequestsQueuedInTheRootAreAnsweredWhenThePeerEnds(t *testing.T) {
 		}
 		answers[f.Error.Code] = true
 	}
-	if !answers["invalid_message"] || !(answers["disconnected"] || answers["cancelled"]) {
+	if !answers["invalid_message"] || !answers["disconnected"] || answers["cancelled"] {
 		t.Fatalf("the first return capability was answered %v", answers)
 	}
 	if f := receive(t, queued.responses); f.Error == nil || f.Error.Code != "disconnected" || f.ID != "c:1" {

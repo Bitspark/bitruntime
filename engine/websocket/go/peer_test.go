@@ -272,13 +272,11 @@ func TestAPeerEndsAWebSocketWithTheCodeItChose(t *testing.T) {
 	// of its pending Read ends, so the far side often reads a dropped
 	// connection instead. A refusal is chosen on the read loop and is not
 	// raced. The rows stay to state what is meant.
-	const inherited = "inherited from v0.6.0: Peer.end cancels the peer's context, which coder/websocket's pending Read turns into a dropped socket, before it sends the close frame"
 	for _, c := range []struct {
 		name   string
 		end    func(ctx context.Context, t *testing.T, peer *engine.Peer, conn *websocket.Conn)
 		code   websocket.StatusCode
 		reason string
-		skip   string
 	}{
 		{
 			name: "a refused frame",
@@ -297,7 +295,6 @@ func TestAPeerEndsAWebSocketWithTheCodeItChose(t *testing.T) {
 			},
 			code:   websocket.StatusPolicyViolation,
 			reason: "why",
-			skip:   inherited,
 		},
 		{
 			name: "a close this side chose",
@@ -305,7 +302,6 @@ func TestAPeerEndsAWebSocketWithTheCodeItChose(t *testing.T) {
 				_ = peer.Close()
 			},
 			code: websocket.StatusNormalClosure,
-			skip: inherited,
 		},
 		{
 			name: "an abnormal closure, which is only observed",
@@ -323,9 +319,6 @@ func TestAPeerEndsAWebSocketWithTheCodeItChose(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if c.skip != "" {
-				t.Skip(c.skip)
-			}
 			peer, conn, ctx := rawClient(t)
 			c.end(ctx, t, peer, conn)
 			var err error
