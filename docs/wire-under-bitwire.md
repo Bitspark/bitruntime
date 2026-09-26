@@ -1,8 +1,10 @@
 # Exploration: Wire underneath Bitwire
 
-**Status: design exploration, 2026-09-26; not an accepted API decision.**
+**Status: naming adopted on 2026-09-26; exact API design remains open.**
 The maintainer asked whether the direction could be stated as
 `Bitwire = Deixis[Wire]`, with an addressless Wire primitive underneath Bitwire.
+The agreed counterpart is `Bitdata = Deixis[Bytes]`: structured interaction and
+structured data share the same Deixis construction. Bitstore names persistence.
 
 Yes. This is a viable interpretation of the A0/A1 direction in
 [Bitwire #42](https://github.com/Bitspark/bitwire/issues/42), and is explicitly
@@ -12,7 +14,7 @@ levels Wire. It still needs a precise contract and crossing evidence.
 
 ## Both contracts in the Bitwire repository
 
-The proposed arrangement keeps both `Wire` and `Bitwire` in
+The target arrangement keeps both `Wire` and `Bitwire` in
 [`github.com/Bitspark/bitwire`](https://github.com/Bitspark/bitwire). `Wire`
 specifies addressless delivery; `Bitwire = Deixis[Wire]` specifies its structural,
 addressed construction. Their native interfaces, laws and independent cases
@@ -163,7 +165,22 @@ Do not insert a revision-2 handshake into bitwire/1. Changing native types,
 changing protocol bytes and changing the meaning of an immutable profile are
 separate decisions.
 
-### The structural layer can be shared with Bytes
+### Bitdata: the same structural layer over Bytes
+
+The maintainer selected **Bitdata** on 2026-09-26:
+
+```text
+Bitwire = Deixis[Wire]       structured interaction
+Bitdata = Deixis[Bytes]      structured byte content
+```
+
+Every Bitdata node has its own byte content and keyed child Bitdata nodes.
+Bitstore provides persistence for encoded Bitdata through its raw blob contract.
+Its current `Store` interface addresses blobs by content hash; it is a backend,
+so the chosen data model is `Deixis[Bytes]`, rather than a tree of Store backends.
+Encoding, content identity and root management retain their explicit contracts
+in [Deixis #49](https://github.com/Bitspark/deixis/issues/49) and
+[bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
 
 The same Deixis operations can lift Wire into addressed sending access and Bytes
 into addressed byte content. This shares key/path laws, own values, selection
@@ -198,11 +215,12 @@ persist endpoints or deliver cross-host transactions.
 
 ## Recommendation to take into the kickoff
 
-Evaluate `Wire` as A0 and `Bitwire` as the addressed A1 API explicitly before
-choosing names or package coordinates. Keep convenient addressed sending as a
-derived operation where useful. Use existing origin/composition observations as
-evidence, then specify the opaque subtree, reply/control and lifecycle boundaries
-with independent cases.
+Use the chosen names: `Wire` for A0, `Bitwire = Deixis[Wire]` for addressed A1,
+and `Bitdata = Deixis[Bytes]` for structured data. Resolve the exact interfaces
+and package coordinates. Keep convenient addressed sending as a derived operation
+where useful. Use existing origin/composition observations as evidence, then
+specify the opaque subtree, reply/control and lifecycle boundaries with
+independent cases.
 
 This does not by itself justify another repository. The primitive and addressed
 contract can be components of Bitwire's specification repository; bitruntime
@@ -214,7 +232,7 @@ current charters do not name. Record the resulting dependency graph and any
 charter amendment explicitly. The mathematical construction alone neither
 requires a particular package dependency nor authorizes adding one silently.
 
-The decision record should compare this proposal with making the public Bitwire
-surface itself addressless. State the public names, admitted structures, ownership,
-message/profile allocation, required version transitions and consumer mapping.
-Do not treat the exploration as approval of either exact API.
+The decision record should specify the exact public interfaces under these names,
+admitted structures, ownership, message/profile allocation, required version
+transitions and consumer mapping. The naming decision leaves those API details
+open.

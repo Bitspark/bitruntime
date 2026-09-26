@@ -58,13 +58,20 @@ bitschema owns validation; Bitlink owns adapters and their generation.
 The API is not fully settled.
 
 Read the maintainer-requested [Wire underneath Bitwire exploration](wire-under-bitwire.md).
-Evaluate `Wire = A0` and `Bitwire = Deixis[Wire] = A1` explicitly: addressed
+Use `Wire = A0` and `Bitwire = Deixis[Wire] = A1` as the target decomposition: addressed
 `Send(path, message)` may survive as a derived convenience API without remaining
 the primitive. Preserve the distinction between a declared tree and opaque access
-to one. This alternative is an exploration, not an approved exact API.
+to one. The exact API remains open.
+
+The maintainer selected the counterpart name on 2026-09-26:
+**`Bitdata = Deixis[Bytes]`**. Use Bitwire for structured interaction, Bitdata for
+structured byte content, and Bitstore for persistence. The current Store backend
+holds raw content-addressed blobs; the data model has Bytes at each node. Carry
+these names into the design and coordination documents. The storage work remains
+with its existing workstreams and does not enlarge this networking milestone.
 
 Keep both contracts in `github.com/Bitspark/bitwire`: `Wire` is the addressless
-primitive and `Bitwire = Deixis[Wire]` is the proposed addressed construction.
+primitive and `Bitwire = Deixis[Wire]` is the target addressed construction.
 Their interfaces, laws and independent conformance belong in that repository;
 bitruntime implements both. Do not create another repository for the primitive.
 The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
@@ -73,8 +80,9 @@ the layout rule does not require a module per type.
 The first design deliverable must resolve, or explicitly defer with a documented
 version boundary:
 
-- Addressless Wire A0 versus addressed A1 = Deixis[A0]. Do not copy the current
-  addressed Send signature and assume it constrains the answer.
+- The exact interfaces for addressless Wire A0 and addressed Bitwire A1, and
+  the migration from today's addressed Wire. Do not copy the current addressed
+  Send signature and assume it constrains the primitive.
 - Which layer owns message representation, return capabilities, correlation,
   cancellation, invocation lifetime, path selection and endpoint ownership.
 - Own values, segment-to-byte-key mapping, opaque child boundaries, missing-path
