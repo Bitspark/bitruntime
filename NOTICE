@@ -7,3 +7,38 @@ The structural-core implementations are written against the public Bitwire
 0.3.0 contract. Structural test expectations are derived from Bitwire's
 independent conformance/trees/expected.json under Apache-2.0. No Nightseam
 runtime source is ported in the v0.1.0 structural core.
+
+Ported from Nightseam
+---------------------
+
+The transports, the addressed operators, the local pair, the invocation
+lifecycle, the dispatcher and helpers, and the bitwire/1 protocol engine are
+ported from Nightseam (https://github.com/Bitspark/nightseam), Copyright 2026
+Bitspark and the Nightseam contributors, licensed under the Apache License,
+Version 2.0. The port is from the released v0.6.0 only, commit
+5cc9723a24646c40ed1861f892b2b23eb6d785d7; none of its later, unreleased commits
+is included. The unmodified sources are recorded in this repository's history
+as their own commit, and every modification is a later commit.
+
+  Nightseam v0.6.0                  bitruntime
+  duplex/go/duplex.go, pipe.go      transports/go
+  duplex/go/ws/ws.go                transports/websocket/go
+  duplex/go/wire.go                 core/go/addressed.go, internal/profile/go
+  runtime/go/wire_pair.go           core/go/pair.go
+  runtime/go/invocation.go          core/go/invocation.go
+  runtime/go/publication.go,
+    meta.go, trace.go               core/go
+  runtime/go/wire.go                core/go/forward.go, core/go/errors.go,
+                                    dispatch/go/dispatch.go,
+                                    internal/request/go, engine/go/wire.go
+  runtime/go/dispatcher.go          dispatch/go/dispatcher.go
+  runtime/go/peer.go                engine/go/peer.go, internal/profile/go
+  runtime/go/http.go                engine/websocket/go
+  runtime/go/json.go,
+    internal/scalarjson             internal/profile/go
+  duplex/ts/src, runtime/ts/src     transports/ts, core/ts, engine/ts,
+                                    dispatch/ts
+  runtime/go and runtime/ts tests   the corresponding *_test.go and ts/test
+
+The files under vectors/bitwire-1/ are byte-identical copies of Nightseam
+v0.6.0's conformance/tables/frames.json, serials.json and unicode.json.
