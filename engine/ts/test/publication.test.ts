@@ -123,15 +123,12 @@ test('a queued write failure has no unpublished proof', async () => {
 test('a refused reverse reply cannot lend its proof to an already delivered call', async () => {
   const [a, b] = pipe();
   // The reply and its bounded fallback, which repeats the request's trace,
-  // are both over the client's frame limit. v0.6.0's raw handler refused them
-  // at the client peer, which ended with frame_too_large at once and settled
-  // the delivered call with that. Behind the root the local return capability
-  // refuses them first, so nothing answers the reverse call before the
-  // deadlines: the delivered call ends at its own (request_timeout), and the
-  // client peer ends as v0.6.0's did when its deadline's answer is refused in
-  // turn. The deadline is shortened here. The delivered call holds no proof
-  // either way, which is what this holds.
-  const client = new Peer({ maxFrameBytes: 160, requestTimeoutMs: 100 });
+  // are both over the client's frame limit. The client's return capability
+  // settles the reply as the bounded internal error, and the client peer's own
+  // response path fails its connection when that does not fit either, as
+  // v0.6.0's raw handler did: the delivered call ends at once with the
+  // connection, not at its deadline, and holds no proof.
+  const client = new Peer({ maxFrameBytes: 160, requestTimeoutMs: 10_000 });
   const server = new Peer({ role: 'server' });
   let delivered = false;
   const ended = deferred<string>();
@@ -142,15 +139,17 @@ test('a refused reverse reply cannot lend its proof to an already delivered call
     return call(context.wire, ['b']);
   });
   await Promise.all([client.attach(a), server.attach(b)]);
+  const started = Date.now();
   try {
     await assert.rejects(call(client.wire(), ['a']), (error: unknown) => {
       assert.equal(delivered, true);
       assert.ok(error instanceof PublicError);
-      assert.equal(error.code, 'request_timeout');
+      assert.equal(error.code, 'disconnected');
       assert.ok(!(error instanceof UnpublishedError), 'another reply lent proof to this delivered request');
       return true;
     });
     assert.equal(await ended.promise, 'frame_too_large');
+    assert.ok(Date.now() - started < 5_000, 'the delivered call waited for its deadline');
   } finally {
     client.close();
     server.close();

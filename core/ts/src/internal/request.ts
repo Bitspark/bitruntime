@@ -124,7 +124,20 @@ export function request<T>(
         invocation.deliver(suffix, message);
         return;
       }
-      const frame = profileFrame(message.frame, '', dispatch?.maxFrameBytes);
+      let frame: ProfileFrame;
+      try {
+        frame = profileFrame(message.frame, '', dispatch?.maxFrameBytes);
+      } catch (error) {
+        // A request a carrier admitted must not be left waiting: a reply that
+        // cannot travel settles as the bounded internal error, which the
+        // carrier sends itself or ends its connection over, as its own
+        // response path does.
+        if (!dispatch || message.frame.kind !== 'response' || message.frame.id !== 'c:1') throw error;
+        if (completion.settled) throw ended();
+        completion.reject(new PublicError('internal', 'Response could not be encoded'));
+        invocation.settle();
+        return;
+      }
       if (frame.kind !== 'response' || frame.id !== 'c:1')
         throw new PublicError('invalid_message', 'Invalid wire response.');
       if (completion.settled) throw ended();
