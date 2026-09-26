@@ -57,11 +57,18 @@ bitschema owns validation; Bitlink owns adapters and their generation.
 
 The API is not fully settled.
 
-Read the maintainer-requested [Wire underneath Bitwire exploration](wire-under-bitwire.md).
-Use `Wire = A0` and `Bitwire = Deixis[Wire] = A1` as the target decomposition: addressed
+Read the maintainer-requested [End underneath Bitwire exploration](wire-under-bitwire.md).
+Use `End = A0` and `Bitwire = Deixis[End] = A1` as the target decomposition: addressed
 `Send(path, message)` may survive as a derived convenience API without remaining
 the primitive. Preserve the distinction between a declared tree and opaque access
 to one. The exact API remains open.
+
+The maintainer revised the primitive name to **End** on 2026-09-26. Keep today's
+addressed `Wire` type names in all eight language presentations. Bitwire names
+the structured interaction model; its native addressed interface remains Wire.
+The earlier proposal to reuse Wire for the primitive is superseded. Preserving
+the addressed name leaves exact interface and profile changes subject to their
+own contract and version decisions.
 
 The maintainer selected the counterpart name on 2026-09-26:
 **`Bitdata = Deixis[Bytes]`**. Use Bitwire for structured interaction, Bitdata for
@@ -70,8 +77,8 @@ holds raw content-addressed blobs; the data model has Bytes at each node. Carry
 these names into the design and coordination documents. The storage work remains
 with its existing workstreams and does not enlarge this networking milestone.
 
-Keep both contracts in `github.com/Bitspark/bitwire`: `Wire` is the addressless
-primitive and `Bitwire = Deixis[Wire]` is the target addressed construction.
+Keep both contracts in `github.com/Bitspark/bitwire`: `End` is the addressless
+primitive and `Wire` supplies addressed access to `Bitwire = Deixis[End]`.
 Their interfaces, laws and independent conformance belong in that repository;
 bitruntime implements both. Do not create another repository for the primitive.
 The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
@@ -80,8 +87,8 @@ the layout rule does not require a module per type.
 The first design deliverable must resolve, or explicitly defer with a documented
 version boundary:
 
-- The exact interfaces for addressless Wire A0 and addressed Bitwire A1, and
-  the migration from today's addressed Wire. Do not copy the current addressed
+- The exact interfaces for addressless End A0 and addressed Wire A1, and
+  their integration with today's addressed Wire. Do not copy the current addressed
   Send signature and assume it constrains the primitive.
 - Which layer owns message representation, return capabilities, correlation,
   cancellation, invocation lifetime, path selection and endpoint ownership.
@@ -91,7 +98,7 @@ version boundary:
   [deixis-svc #1](https://github.com/Bitspark/deixis-svc/issues/1),
   [bitwire-svc #9](https://github.com/Bitspark/bitwire-svc/issues/9) and
   [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).
-  Wire and Bytes must use the same structural contract; a generic relay does not
+  End and Bytes must use the same structural contract; a generic relay does not
   acquire application interpretation.
   Record any shared Deixis library dependency and reconcile it with the charters.
 - Public lifecycle facilities: admission, capture, cancellation, actual body

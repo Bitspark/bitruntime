@@ -2,11 +2,14 @@
 
 ## Unreleased
 
-- Record the chosen naming pair, Bitwire = Deixis[Wire] and Bitdata =
+- Name the addressless primitive End and retain the addressed Wire type names
+  in all eight languages; update the exploration and migration kickoff.
+
+- Record the chosen naming pair, Bitwire = Deixis[End] and Bitdata =
   Deixis[Bytes], in the exploration and migration kickoff; keep Bitstore's
   persistence role and the remaining API decisions explicit.
 
-- Make the explored Wire/Bitwire split explicit within the same Bitwire contract
+- Make the explored End/Wire split explicit within the same Bitwire contract
   repository, and preserve attenuation when selecting an origin's send access.
 
 - Document the family component-first layout with two-letter language directories,
