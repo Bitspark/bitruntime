@@ -1,7 +1,8 @@
 # Exploration: End underneath Bitwire
 
 **Status: naming adopted on 2026-09-26; exact API design remains open.**
-The maintainer chose `End` for the addressless primitive:
+The maintainer chose `End`, Deixis's word for what a party holds, for the
+addressless primitive:
 `Bitwire = Deixis[End]`. The existing addressed `Wire` interface keeps its name
 in all eight language presentations. This revises the earlier proposal to name
 the primitive Wire and rename the addressed interface.

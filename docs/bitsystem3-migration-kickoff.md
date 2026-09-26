@@ -84,8 +84,12 @@ bitruntime implements both. Do not create another repository for the primitive.
 The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
 the layout rule does not require a module per type.
 
-The first design deliverable must resolve, or explicitly defer with a documented
-version boundary:
+The Bitwire session (bitwire-12) has claimed this design deliverable on
+[Bitwire #42](https://github.com/Bitspark/bitwire/issues/42#issuecomment-5843652866)
+as a proposed decision 0011. Review that draft, run small experiments against it
+and report findings on #42 or its pull request; do not write a competing decision.
+The deliverable must resolve, or explicitly defer with a documented version
+boundary:
 
 - The exact interfaces for addressless End A0 and addressed Wire A1, and
   their integration with today's addressed Wire. Do not copy the current addressed

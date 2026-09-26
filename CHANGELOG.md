@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Name the addressless primitive End and retain the addressed Wire type names
-  in all eight languages; update the exploration and migration kickoff.
+  in all eight languages; update the exploration and migration kickoff. The
+  kickoff points to the Bitwire session's claimed design deliverable on #42.
 
 - Record the chosen naming pair, Bitwire = Deixis[End] and Bitdata =
   Deixis[Bytes], in the exploration and migration kickoff; keep Bitstore's
