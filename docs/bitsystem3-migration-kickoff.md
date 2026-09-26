@@ -57,13 +57,18 @@ bitschema owns validation; Bitlink owns adapters and their generation.
 
 The API is not fully settled.
 
-Read the maintainer-requested [Wire underneath Bitwire exploration](wire-under-bitwire.md).
+Read the maintainer-requested [End underneath Bitwire exploration](wire-under-bitwire.md).
 Use `End = A0` and `Bitwire = Deixis[End] = A1` as the target decomposition: addressed
 `Send(path, message)` may survive as a derived convenience API without remaining
-the primitive. The maintainer chose the name `End` on 2026-09-26, after this
-kickoff first said `Wire = A0`. `bitwire.Wire` stays the addressed interface and
-keeps its name in every language. Preserve the distinction between a declared tree and opaque access
+the primitive. Preserve the distinction between a declared tree and opaque access
 to one. The exact API remains open.
+
+The maintainer revised the primitive name to **End** on 2026-09-26. Keep today's
+addressed `Wire` type names in all eight language presentations. Bitwire names
+the structured interaction model; its native addressed interface remains Wire.
+The earlier proposal to reuse Wire for the primitive is superseded. Preserving
+the addressed name leaves exact interface and profile changes subject to their
+own contract and version decisions.
 
 The maintainer selected the counterpart name on 2026-09-26:
 **`Bitdata = Deixis[Bytes]`**. Use Bitwire for structured interaction, Bitdata for
@@ -73,8 +78,7 @@ these names into the design and coordination documents. The storage work remains
 with its existing workstreams and does not enlarge this networking milestone.
 
 Keep both contracts in `github.com/Bitspark/bitwire`: `End` is the addressless
-primitive and `Bitwire = Deixis[End]` is the target addressed construction, presented
-natively as `bitwire.Wire`.
+primitive and `Wire` supplies addressed access to `Bitwire = Deixis[End]`.
 Their interfaces, laws and independent conformance belong in that repository;
 bitruntime implements both. Do not create another repository for the primitive.
 The existing `wire/go/` and `wire/ts/` presentations may hold both native types;
@@ -87,8 +91,8 @@ and report findings on #42 or its pull request; do not write a competing decisio
 The deliverable must resolve, or explicitly defer with a documented version
 boundary:
 
-- The exact interfaces for the addressless End (A0) and addressed Bitwire (A1,
-  the `Wire` type), and the migration from today's addressed Wire. Do not copy the current addressed
+- The exact interfaces for addressless End A0 and addressed Wire A1, and
+  their integration with today's addressed Wire. Do not copy the current addressed
   Send signature and assume it constrains the primitive.
 - Which layer owns message representation, return capabilities, correlation,
   cancellation, invocation lifetime, path selection and endpoint ownership.

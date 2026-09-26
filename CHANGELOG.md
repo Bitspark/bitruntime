@@ -2,12 +2,15 @@
 
 ## Unreleased
 
-- Rename the addressless primitive to `End` in the kickoff and the Wire-underneath-Bitwire exploration (maintainer decision, 26 September 2026): `Bitwire = Deixis[End]`, and `bitwire.Wire` stays the addressed interface. The kickoff now points to the Bitwire session's claimed design deliverable on Bitwire #42.
-- Record the chosen naming pair, Bitwire = Deixis[Wire] and Bitdata =
+- Name the addressless primitive End and retain the addressed Wire type names
+  in all eight languages; update the exploration and migration kickoff. The
+  kickoff points to the Bitwire session's claimed design deliverable on #42.
+
+- Record the chosen naming pair, Bitwire = Deixis[End] and Bitdata =
   Deixis[Bytes], in the exploration and migration kickoff; keep Bitstore's
   persistence role and the remaining API decisions explicit.
 
-- Make the explored Wire/Bitwire split explicit within the same Bitwire contract
+- Make the explored End/Wire split explicit within the same Bitwire contract
   repository, and preserve attenuation when selecting an origin's send access.
 
 - Document the family component-first layout with two-letter language directories,
