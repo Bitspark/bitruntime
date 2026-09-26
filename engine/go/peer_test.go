@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	dispatch "github.com/Bitspark/bitruntime/dispatch/go"
 	engine "github.com/Bitspark/bitruntime/engine/go"
 	transports "github.com/Bitspark/bitruntime/transports/go"
+	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
 func receive[T any](t *testing.T, channel <-chan T) T {
@@ -560,4 +562,126 @@ func TestSubprotocolIsNoneOverAnyOtherTransport(t *testing.T) {
 	if client.Subprotocol() != "" || server.Subprotocol() != "" {
 		t.Fatalf("subprotocols over a pipe = %q and %q", client.Subprotocol(), server.Subprotocol())
 	}
+}
+
+// heldReturn is a return capability that records what it is answered and
+// holds the one who answers it with the code named, until released.
+type heldReturn struct {
+	responses chan wire.ProfileFrame
+	holdOn    string
+	held      chan struct{}
+	release   chan struct{}
+	once      sync.Once
+}
+
+func newHeldReturn(holdOn string) *heldReturn {
+	return &heldReturn{responses: make(chan wire.ProfileFrame, 8), holdOn: holdOn, held: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (r *heldReturn) Send(_ []string, message wire.Message) error {
+	if r.holdOn != "" && message.Frame.Error != nil && message.Frame.Error.Code == r.holdOn {
+		r.once.Do(func() { close(r.held) })
+		<-r.release
+	}
+	r.responses <- message.Frame
+	return nil
+}
+
+func request(id string) wire.ProfileFrame {
+	return wire.ProfileFrame{Version: 1, Kind: wire.ProfileRequest, ID: id, Params: json.RawMessage(`null`)}
+}
+
+// TestRequestsQueuedInTheRootAreAnsweredWhenThePeerEnds (R28): a request the
+// root admitted and never handed to the peer, and a refusal it queued, are
+// each answered when the peer ends — disconnected and the refusal — rather
+// than left to their callers' deadlines. The root is held on purpose, inside
+// the answer to a refusal, so that what follows it is still queued when the
+// peer ends.
+func TestRequestsQueuedInTheRootAreAnsweredWhenThePeerEnds(t *testing.T) {
+	peer, raw := rawPeer(t, engine.ServerRole, engine.Options{MaxPendingRequests: 3, RequestTimeout: time.Minute})
+	root := peer.Wire()
+	first := newHeldReturn("invalid_message")
+	firstAddress := &wire.ReturnAddress{Wire: first}
+	// Admitted and handed to the peer: it reaches the wire.
+	if err := root.Send([]string{"first"}, wire.Message{Frame: request("c:1"), Return: firstAddress}); err != nil {
+		t.Fatal(err)
+	}
+	if sent := raw.read(); string(sent["method"]) != `"5:first"` {
+		t.Fatalf("the first request reached the wire as %v", sent)
+	}
+	// The same return identity again is refused invalid_message; answering it
+	// holds the root.
+	if err := root.Send([]string{"first"}, wire.Message{Frame: request("c:1"), Return: firstAddress}); err != nil {
+		t.Fatal(err)
+	}
+	receive(t, first.held)
+	queued, refused := newHeldReturn(""), newHeldReturn("")
+	if err := root.Send([]string{"queued"}, wire.Message{Frame: request("c:1"), Return: &wire.ReturnAddress{Wire: queued}}); err != nil {
+		t.Fatal(err)
+	}
+	// And a call through the dispatch helper, queued behind it.
+	sent := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- dispatch.Call(context.Background(), sendSignal{root, sent}, []string{"late"}, nil, nil, dispatch.CallOptions{Timeout: time.Minute})
+	}()
+	receive(t, sent)
+	// The root holds three admitted, its bound: the next is a queued refusal.
+	if err := root.Send([]string{"refused"}, wire.Message{Frame: request("c:1"), Return: &wire.ReturnAddress{Wire: refused}}); err != nil {
+		t.Fatal(err)
+	}
+
+	_ = peer.Close()
+	close(first.release)
+
+	// The request already handed to the peer is answered by its own waiter.
+	// Which code it carries is a race inherited from v0.6.0: the waiter's
+	// context derives from the peer's, which ends at the moment the peer does,
+	// so it reads either the end (disconnected) or its context (cancelled).
+	answers := map[string]bool{}
+	for range 2 {
+		f := receive(t, first.responses)
+		if f.Error == nil {
+			t.Fatalf("the first request was answered %+v", f)
+		}
+		answers[f.Error.Code] = true
+	}
+	if !answers["invalid_message"] || !(answers["disconnected"] || answers["cancelled"]) {
+		t.Fatalf("the first return capability was answered %v", answers)
+	}
+	if f := receive(t, queued.responses); f.Error == nil || f.Error.Code != "disconnected" || f.ID != "c:1" {
+		t.Fatalf("the request queued in the root was answered %+v", f)
+	}
+	if f := receive(t, refused.responses); f.Error == nil || f.Error.Code != "busy" || f.Error.Message != "Outstanding call limit reached" {
+		t.Fatalf("the refusal queued in the root was answered %+v", f)
+	}
+	var public *core.PublicError
+	if err := receive(t, returned); !errors.As(err, &public) || public.Code != "disconnected" {
+		t.Fatalf("a call queued in the root returned %v", err)
+	}
+	// Nothing queued in the root reached the wire.
+	for {
+		received, err := raw.conn.Receive(raw.ctx)
+		if err != nil {
+			break
+		}
+		if strings.Contains(string(received.Data), `"kind":"request"`) {
+			t.Fatalf("a request queued in the root reached the wire: %s", received.Data)
+		}
+	}
+}
+
+// sendSignal is addressed access that says when a request it forwarded was
+// taken.
+type sendSignal struct {
+	wire.AddressedWire
+	sent chan struct{}
+}
+
+func (s sendSignal) Send(path []string, message wire.Message) error {
+	err := s.AddressedWire.Send(path, message)
+	if message.Frame.Kind == wire.ProfileRequest {
+		close(s.sent)
+	}
+	return err
 }

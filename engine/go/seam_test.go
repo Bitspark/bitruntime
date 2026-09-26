@@ -1,12 +1,14 @@
 package engine_test
 
 // Ported from Nightseam v0.6.0 runtime/go/seam_test.go
-// (5cc9723a24646c40ed1861f892b2b23eb6d785d7).
+// (5cc9723a24646c40ed1861f892b2b23eb6d785d7), with the close-code tests for
+// research R27 beside the ones it held.
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -234,6 +236,56 @@ func TestHowAPeerEndsAConnectionIsWhatTheFarSideReads(t *testing.T) {
 			}
 			if wire.Code != c.code || wire.Reason != c.reason {
 				t.Fatalf("the far side read %d %q, want %d %q", int(wire.Code), wire.Reason, int(c.code), c.reason)
+			}
+		})
+	}
+}
+
+// TestAnObserveOnlyCloseCodeAbortsTheConnection (R27): a code that may only
+// be observed — no status, an abnormal closure, a failed TLS handshake — is
+// never transmitted. The root asked to close with one aborts, and the far
+// side observes the abort itself: 1006 with no reason, not the code or the
+// reason it was asked to send.
+func TestAnObserveOnlyCloseCodeAbortsTheConnection(t *testing.T) {
+	for _, code := range []transports.Code{transports.CodeNoStatus, transports.CodeAbnormalClosure, transports.CodeTLSHandshake} {
+		t.Run(strconv.Itoa(int(code)), func(t *testing.T) {
+			peer, raw := rawPeer(t, engine.ServerRole, engine.Options{})
+			if err := peer.Wire().Close(code, "x"); err != nil {
+				t.Fatal(err)
+			}
+			if closed := raw.closed(); closed.Code != transports.CodeAbnormalClosure || closed.Reason != "" {
+				t.Fatalf("the far side read %d %q, want an abort", int(closed.Code), closed.Reason)
+			}
+			receive(t, peer.Done())
+			if err := peer.Err(); !errors.Is(err, transports.ErrClosed) {
+				t.Fatalf("the peer ended with %v", err)
+			}
+		})
+	}
+}
+
+// TestASendableCloseCodeTravelsWithItsReason (R27): a code that may be sent is
+// the close the far side reads, with the reason given.
+func TestASendableCloseCodeTravelsWithItsReason(t *testing.T) {
+	for _, c := range []struct {
+		code   transports.Code
+		reason string
+	}{
+		{transports.CodePolicyViolation, "why"},
+		{transports.CodeNormal, ""},
+		{transports.CodeApplicationFirst, "application"},
+	} {
+		t.Run(strconv.Itoa(int(c.code)), func(t *testing.T) {
+			peer, raw := rawPeer(t, engine.ServerRole, engine.Options{})
+			if err := peer.Wire().Close(c.code, c.reason); err != nil {
+				t.Fatal(err)
+			}
+			if closed := raw.closed(); closed.Code != c.code || closed.Reason != c.reason {
+				t.Fatalf("the far side read %d %q, want %d %q", int(closed.Code), closed.Reason, int(c.code), c.reason)
+			}
+			receive(t, peer.Done())
+			if err := peer.Err(); !errors.Is(err, transports.ErrClosed) {
+				t.Fatalf("the peer ended with %v", err)
 			}
 		})
 	}
