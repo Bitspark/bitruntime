@@ -342,19 +342,14 @@ func TestRefusedReverseReplyCannotProveDeliveredCallUnpublished(t *testing.T) {
 }
 
 // TestOversizedReverseReplyFallbackEndsTheCarrier keeps the assertion of
-// v0.6.0's TestRefusedReverseReplyCannotProveDeliveredCallUnpublished that the
-// root Endpoint does not meet: when even the bounded fallback of an oversized
-// reply does not fit, v0.6.0's raw handler path failed the connection (the
-// "failure broadcast"). Through the root, the reply capability refuses both
-// the reply and its fallback (core.Respond, internal/request Reply.Send, as
-// v0.6.0's replyWire did), the carrier stays up and the remote caller waits
-// for its request deadline.
-//
-// Unskipped, it ends only when newPeerPair's 10-second dial context ends the
-// client, which would satisfy the original assertion for the wrong reason; the
-// elapsed-time check refuses that.
+// v0.6.0's TestRefusedReverseReplyCannotProveDeliveredCallUnpublished: when even
+// the bounded fallback of an oversized reply does not fit, the connection fails
+// rather than leaving the remote caller to its deadline. Through the root, the
+// reply capability settles an unencodable reply as the bounded internal error,
+// and the engine's own response path fails the connection when that does not
+// fit either. The elapsed-time check refuses a pass that only the 10-second
+// dial context of newPeerPair would produce.
 func TestOversizedReverseReplyFallbackEndsTheCarrier(t *testing.T) {
-	t.Skip("root Endpoint refuses an oversized reply and its fallback at the return capability and leaves the request to its deadline; only v0.6.0's removed Options.Handlers path failed the carrier")
 	var delivered atomic.Bool
 	serverOptions, clientOptions := reverseReplyServers(&delivered)
 	client, _ := newPeerPair(t, serverOptions, clientOptions)

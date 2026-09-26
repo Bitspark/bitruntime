@@ -73,6 +73,11 @@ None changes a `bitwire/1` frame.
   The peer closes its connection before cancelling its context, so a WebSocket
   peer ended from another goroutine transmits the code it chose; v0.6.0's
   order let the far side observe 1006 instead.
+- **An unencodable reply never strands its caller.** A reply to a request a
+  carrier admitted that cannot travel settles as the bounded `internal` error,
+  and the engine fails its connection when even that does not fit, as v0.6.0's
+  raw response path did. Through v0.6.0's root the remote caller waited for its
+  deadline.
 - **Observe-only close codes (R27).** `transports.Sendable` separates codes that
   may be sent from 1005, 1006 and 1015. Transports refuse the latter with
   `ErrUnsendableCode`; a peer asked to close with one aborts instead.
@@ -92,6 +97,17 @@ None changes a `bitwire/1` frame.
   without that handler answers. Observer hooks and family labels are removed
   until the engine's observation hooks are designed with Bitwire's
   received-context revision (charter §1).
+
+## Kept as v0.6.0 behaved
+
+- A request refused at the root's pending bound is answered through its return
+  capability, so its caller gets `busy` without proof that nothing was
+  published; v0.6.0's removed `Peer.Call` refused it synchronously. Whether a
+  synchronous refusal must prove non-publication is research decision 4, still
+  open in Bitwire.
+- A local pair and a peer's root still end their carrier when a bounded queue
+  overflows. The send whose overflow ended it reports `core.ErrBackpressure`
+  with the closed classification; later sends report the carrier closed.
 
 ## Not ported in this milestone
 

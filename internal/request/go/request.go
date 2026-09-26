@@ -73,7 +73,15 @@ func (w *Reply) Send(path []string, message wire.Message) error {
 		message.Frame.Error = &copied
 	}
 	if err := profile.Validate("", message.Frame, limit); err != nil {
-		return err
+		if w.dispatch == nil {
+			return err
+		}
+		// A request a carrier admitted must not be left waiting: a reply that
+		// cannot travel settles as the bounded internal error, which the
+		// carrier sends itself or ends its connection over, as its own
+		// response path does.
+		message.Frame.Result = nil
+		message.Frame.Error = &wire.ProfileError{Code: "internal", Message: "Response could not be encoded"}
 	}
 	r := Result{Value: message.Frame.Result}
 	if f := message.Frame.Error; f != nil {
