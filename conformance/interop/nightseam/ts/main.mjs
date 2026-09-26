@@ -1,4 +1,4 @@
-// Nightseam v0.6.0's TypeScript program of the interoperability scenario in
+// nightseam v0.6.0's TypeScript program of the interoperability scenario in
 // conformance/interop/README.md. Test-only, pinned to the released packages.
 import {WebSocketServer} from 'ws';
 import {at} from '@nightseam/duplex';

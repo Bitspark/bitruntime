@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 runtime/go/invocation_experiment_test.go
+// Ported from nightseam v0.6.0 runtime/go/invocation_experiment_test.go
 // (commit 5cc9723a): the second independent lifecycle participant, a pure
 // forwarding route and an opaque wrapper, using public facilities only.
 

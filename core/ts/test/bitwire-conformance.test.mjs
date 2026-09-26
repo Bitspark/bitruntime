@@ -4,10 +4,10 @@ import test from 'node:test';
 import { compose, select, send } from '../../../dist/core/ts/src/index.js';
 
 // Independent oracle: Bitspark/bitwire 0.3.0, conformance/trees/expected.json.
-// This driver uses the production runtime, not Bitwire's test interpreter.
+// This driver uses the production runtime, not bitwire's test interpreter.
 const expected = JSON.parse(readFileSync(new URL('./bitwire-expected.json', import.meta.url), 'utf8'));
 
-test('production core matches Bitwire full-tree independent observations', () => {
+test('production core matches bitwire full-tree independent observations', () => {
   const k = (...values) => Uint8Array.from(values);
   const admissions = [];
   const labels = new Map();

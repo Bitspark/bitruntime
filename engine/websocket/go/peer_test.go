@@ -1,6 +1,6 @@
 package websocket_test
 
-// Ported from Nightseam v0.6.0 runtime/go/peer_test.go
+// Ported from nightseam v0.6.0 runtime/go/peer_test.go
 // (5cc9723a24646c40ed1861f892b2b23eb6d785d7): the tests about setting a
 // connection up — authentication, origin, subprotocols and the dial deadline.
 // What a peer serves is a dispatcher at its root, attached in Prepare, since

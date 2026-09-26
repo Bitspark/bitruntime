@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 duplex/go/wire_test.go (commit 5cc9723a): At,
+// Ported from nightseam v0.6.0 duplex/go/wire_test.go (commit 5cc9723a): At,
 // Mount and the canonical path encoding the addressed carriers share.
 
 import (

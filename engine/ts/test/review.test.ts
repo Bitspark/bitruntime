@@ -1,5 +1,5 @@
 // Regressions for what the independent review of the TypeScript port found.
-// Each held for Nightseam v0.6.0 as well; each is fixed here.
+// Each held for nightseam v0.6.0 as well; each is fixed here.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Endpoint } from '@bitspark/bitwire';

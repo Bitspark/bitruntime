@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 runtime/go/trace_test.go (commit 5cc9723a).
+// Ported from nightseam v0.6.0 runtime/go/trace_test.go (commit 5cc9723a).
 // Handlers are attached through the peer's root Endpoint (research R20), so a
 // method or event name on the wire is the canonical encoding of its path:
 // "far" travels as "3:far", "outer" as "5:outer", and so on.

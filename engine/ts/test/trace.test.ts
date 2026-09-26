@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/trace.test.ts. Handlers and
+// Ported from nightseam v0.6.0 runtime/ts/src/trace.test.ts. Handlers and
 // calls go through the peer's root: a request's method and an event's name
 // are the canonical encodings of their paths ('5:outer' for ['outer']), and a
 // call made from a handler names its context, and its propagator, explicitly.

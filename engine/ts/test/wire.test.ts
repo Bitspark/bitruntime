@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/wire.test.ts. Not ported: the
+// Ported from nightseam v0.6.0 runtime/ts/src/wire.test.ts. Not ported: the
 // observer's request.ended and handler.panic assertions, and the 'peer' route
 // of the cancellation matrix, which served and called through the removed raw
 // peer API — the 'wire' route is that same peer now. Each other change is

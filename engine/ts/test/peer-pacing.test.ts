@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/peer-pacing.test.ts. The peer
+// Ported from nightseam v0.6.0 runtime/ts/src/peer-pacing.test.ts. The peer
 // paces only what it sends of its own accord — a response — for one write
 // deadline; what the root hands it is admitted or refused at once. Not ported,
 // because they held the pacing of the removed raw emit and call: "public emit

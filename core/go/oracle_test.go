@@ -27,7 +27,7 @@ func (p *oraclePrimitive) Send(message wire.Message) error {
 	return nil
 }
 
-// This adapter observes the production runtime against Bitwire's independently
+// This adapter observes the production runtime against bitwire's independently
 // written oracle. It does not contain a reference tree implementation.
 func TestBitwireStructuralOracle(t *testing.T) {
 	admissions := []string{}
@@ -90,6 +90,6 @@ func TestBitwireStructuralOracle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("Bitwire structural observations differ\ngot: %s\nwant: %s", gotBytes, wantBytes)
+		t.Fatalf("bitwire structural observations differ\ngot: %s\nwant: %s", gotBytes, wantBytes)
 	}
 }

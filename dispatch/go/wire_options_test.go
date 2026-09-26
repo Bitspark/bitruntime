@@ -13,7 +13,7 @@ import (
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
-// Nightseam v0.6.0 called the raw method name "8:deadline" here; that is the
+// nightseam v0.6.0 called the raw method name "8:deadline" here; that is the
 // wire name of the path ["deadline"], which the removed raw API no longer
 // spells for a caller.
 func TestWireForwardingRetainsTheAdmittedDeadline(t *testing.T) {

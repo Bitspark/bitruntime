@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 runtime/go/wire_namespace_test.go (commit
+// Ported from nightseam v0.6.0 runtime/go/wire_namespace_test.go (commit
 // 5cc9723a): the ForwardWire tests, which concern core.Forward alone.
 
 import (

@@ -1,4 +1,4 @@
-// Regressions of what forward changes from Nightseam v0.6.0's forwardWire:
+// Regressions of what forward changes from nightseam v0.6.0's forwardWire:
 // research 0001 row 14 (a refused message fails only itself) and R26 (a
 // closed destination answers disconnected, never internal).
 import assert from 'node:assert/strict';

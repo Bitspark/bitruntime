@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/invocation-experiment.test.ts.
+// Ported from nightseam v0.6.0 runtime/ts/src/invocation-experiment.test.ts.
 // The second integration uses the public vocabulary and nothing else.
 import assert from 'node:assert/strict';
 import test from 'node:test';

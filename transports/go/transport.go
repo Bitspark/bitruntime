@@ -54,7 +54,7 @@ type Frame struct {
 	Data []byte
 }
 
-// Code is a close code, the Bitwire contract's own type. The numbers are the
+// Code is a close code, the bitwire contract's own type. The numbers are the
 // WebSocket registry's, kept on every transport so that a close means the
 // same thing whatever carried it.
 type Code = wire.Code

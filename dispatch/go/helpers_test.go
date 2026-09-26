@@ -61,7 +61,7 @@ func newPair(t *testing.T, serverOptions, clientOptions engine.Options) (*engine
 }
 
 // sentFrames records what a connection's writer hands its transport, in that
-// order, as "kind name". It stands where Nightseam v0.6.0's tests read the
+// order, as "kind name". It stands where nightseam v0.6.0's tests read the
 // observer's FrameSent events, which bitruntime does not have. A frame is
 // recorded before it is sent, so whatever the far side has received is
 // already recorded.
@@ -215,7 +215,7 @@ func wantUnpublished(t *testing.T, err error, want bool) {
 
 // invocationEndpoint is an endpoint written against the public contract alone:
 // Receive holds one attachment and deliver hands it a message exactly as it
-// arrived. It is the part of Nightseam v0.6.0's invocation fixture the
+// arrived. It is the part of nightseam v0.6.0's invocation fixture the
 // dispatcher tests use.
 type invocationEndpoint struct {
 	mu       sync.Mutex

@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/dispatcher-ownership.test.ts.
+// Ported from nightseam v0.6.0 runtime/ts/src/dispatcher-ownership.test.ts.
 // A path a mount has no child for is refused with MissingPathError
 // ('missing_path', was the duplex wire error 'no_route').
 import assert from 'node:assert/strict';

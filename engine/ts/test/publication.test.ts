@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/publication.test.ts, with the
+// Ported from nightseam v0.6.0 runtime/ts/src/publication.test.ts, with the
 // raw peer calls and handlers expressed through the root and the dispatch
 // helpers. Where the root changes what can be observed, the test says so.
 import assert from 'node:assert/strict';

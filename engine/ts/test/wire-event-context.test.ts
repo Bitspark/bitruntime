@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/wire-event-context.test.ts.
+// Ported from nightseam v0.6.0 runtime/ts/src/wire-event-context.test.ts.
 // The one changed assertion: a listener's context no longer reaches the peer
 // that delivered its event (R19/R23 remove that escape hatch), where v0.6.0
 // held that it did.

@@ -15,7 +15,7 @@ import (
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
-// Ported from Nightseam v0.6.0 runtime/go/wire_cancel_reservation_test.go.
+// Ported from nightseam v0.6.0 runtime/go/wire_cancel_reservation_test.go.
 // These tests read the peer's outgoing queue and complete its pending calls
 // directly, so they live beside the root they exercise.
 

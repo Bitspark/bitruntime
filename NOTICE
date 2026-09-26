@@ -3,12 +3,12 @@ Copyright 2026 Bitspark and the bitruntime contributors
 
 This product includes software developed at Bitspark (https://github.com/Bitspark).
 
-The structural-core implementations are written against the public Bitwire
-0.3.0 contract. Structural test expectations are derived from Bitwire's
-independent conformance/trees/expected.json under Apache-2.0. No Nightseam
+The structural-core implementations are written against the public bitwire
+0.3.0 contract. Structural test expectations are derived from bitwire's
+independent conformance/trees/expected.json under Apache-2.0. No nightseam
 runtime source is ported in the v0.1.0 structural core.
 
-Ported from Nightseam
+Ported from nightseam
 ---------------------
 
 The transports, the addressed operators, the local pair, the invocation
@@ -20,7 +20,7 @@ Version 2.0. The port is from the released v0.6.0 only, commit
 is included. The unmodified sources are recorded in this repository's history
 as their own commit, and every modification is a later commit.
 
-  Nightseam v0.6.0                  bitruntime
+  nightseam v0.6.0                  bitruntime
   duplex/go/duplex.go, pipe.go      transports/go
   duplex/go/ws/ws.go                transports/websocket/go
   duplex/go/wire.go                 core/go/addressed.go, internal/profile/go
@@ -50,5 +50,5 @@ as their own commit, and every modification is a later commit.
   runtime/ts/src/peer.ts            engine/ts/src/peer.ts
   runtime/go and runtime/ts tests   the corresponding *_test.go and ts/test
 
-The files under vectors/bitwire-1/ are byte-identical copies of Nightseam
+The files under vectors/bitwire-1/ are byte-identical copies of nightseam
 v0.6.0's conformance/tables/frames.json, serials.json and unicode.json.

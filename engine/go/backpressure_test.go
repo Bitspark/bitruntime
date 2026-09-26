@@ -1,6 +1,6 @@
 package engine_test
 
-// Ported from Nightseam v0.6.0 runtime/go/backpressure_test.go
+// Ported from nightseam v0.6.0 runtime/go/backpressure_test.go
 // (5cc9723a24646c40ed1861f892b2b23eb6d785d7). v0.6.0 held a peer's writes on a
 // delayed TCP connection beneath a WebSocket; here a gate on the pipe's Send
 // holds them at the seam, which is where the peer's writer meets its

@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/carriage.test.ts. Handlers and
+// Ported from nightseam v0.6.0 runtime/ts/src/carriage.test.ts. Handlers and
 // calls go through the peer's root with the dispatch helpers. Not ported: the
 // test that no meta value reaches an observer (observers are removed).
 import assert from 'node:assert/strict';
