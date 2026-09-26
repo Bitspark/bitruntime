@@ -30,9 +30,14 @@ the same obligations, irrespective of whether an own primitive reads or sends:
 - `own()`, `children()`, partial `at(path)` and `decompose()`;
 - reconstruction from the own value and complete child parts;
 - a finite acyclic structure, with byte keys compared by content;
+- duplicate-byte-key rejection and protection against key/child-map mutation;
 - empty-path selection is self, and a missing child is absence;
 - an empty key is a real child key, distinct from the empty path;
 - selection composition and decompose/recompose round trips preserve structure.
+
+Construction and reconstruction preserve own-capability and retained-child
+identity. Shared child instances under different names are permitted; structural
+cycles are not.
 
 The shared TypeScript shape is:
 
