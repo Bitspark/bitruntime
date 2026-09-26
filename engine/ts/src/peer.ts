@@ -23,7 +23,7 @@ import {
 import { rootWire, type EventHandler, type RequestHandler } from './wire.ts';
 
 /**
- * The protocol revision this engine speaks: the behavior of Nightseam
+ * The protocol revision this engine speaks: the behavior of nightseam
  * v0.6.0's `nightseam.duplex/1` profile. The name never travels on a
  * connection and is offered as no subprotocol by default.
  */

@@ -96,6 +96,21 @@ structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public
 publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
 registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 
+To install a release, require the Go module at its tag and the TypeScript
+package from its release asset:
+
+```sh
+go get github.com/Bitspark/bitruntime@v0.2.0
+npm install https://github.com/Bitspark/bitruntime/releases/download/v0.2.0/bitspark-bitruntime-0.2.0.tgz
+```
+
+npm 12 refuses dependencies that are tarball URLs unless the project allows
+them. Add `allow-remote=root` to the project's `.npmrc`; it admits only the URLs
+the project's own `package.json` names. Where a user configuration maps the
+`@bitspark` scope to another registry, also pin
+`@bitspark:registry=https://registry.npmjs.org/` there, since the package's
+dependency `@bitspark/bitwire` comes from npm.
+
 The generic core uses bitwire's native node declarations. TypeScript accepts
 bitstore's matching structural node type directly; Go requires an explicit
 adapter between the two packages' recursive node types. The shared semantic

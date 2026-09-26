@@ -1,6 +1,6 @@
 package engine_test
 
-// Ported from Nightseam v0.6.0 runtime/go/carriage_test.go
+// Ported from nightseam v0.6.0 runtime/go/carriage_test.go
 // (5cc9723a24646c40ed1861f892b2b23eb6d785d7). The carriage a request and an
 // event may take: what is about the call rather than the call. The peer
 // accepts it and keeps it on the decoded frame, and sends what WithMeta placed

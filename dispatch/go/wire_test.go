@@ -194,7 +194,7 @@ func TestWireKeepsReceivedContextWithoutForwardingApplicationMetadata(t *testing
 	}
 }
 
-// Nightseam v0.6.0 also counted the peer's HandlerPanic observations here;
+// nightseam v0.6.0 also counted the peer's HandlerPanic observations here;
 // bitruntime has no observer.
 func TestWireHandlerPanicStaysPrivate(t *testing.T) {
 	client, server := newPair(t, engine.Options{}, engine.Options{})

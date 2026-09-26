@@ -92,7 +92,7 @@ func delayedWritePair(t *testing.T, control *delayedWriteControl, serverOptions,
 
 // rootTaken tells when the peer's root has taken a frame off its own queue:
 // the root extracts each request's and event's trace before it hands the frame
-// to the peer. Nightseam v0.6.0's raw Emit queued its frame synchronously;
+// to the peer. nightseam v0.6.0's raw Emit queued its frame synchronously;
 // through the root, a test that needs the root's queue empty again waits here.
 type rootTaken struct {
 	core.Propagator
@@ -115,7 +115,7 @@ func (p rootTaken) Extract(ctx context.Context, trace core.Trace) context.Contex
 // write deadline is deliberately much longer than the caller's bound: waiting
 // for that deadline would make fan-out run at its slowest destination's pace.
 //
-// Nightseam v0.6.0 also counted the observer's terminal Backpressure events;
+// nightseam v0.6.0 also counted the observer's terminal Backpressure events;
 // bitruntime has no observer. Its raw Emit is the root's Emit here.
 func TestWireSendEndsAFullCarrierWithoutWaitingForItsConsumer(t *testing.T) {
 	release := make(chan struct{})
@@ -187,7 +187,7 @@ func TestWireRequestEndsAFullCarrierWithoutWaitingForItsConsumer(t *testing.T) {
 	}
 }
 
-// Nightseam v0.6.0 also made a raw, paced call wait for the full queue here
+// nightseam v0.6.0 also made a raw, paced call wait for the full queue here
 // and withdrew it, proving that call unpublished; bitruntime removed the raw
 // call, and a call through the root is never paced. What remains is the
 // earlier admitted call: the immediate dispatch that ends the carrier cannot
@@ -223,7 +223,7 @@ func TestOutputCancellationProofBelongsOnlyToTheUnadmittedCall(t *testing.T) {
 		t.Fatalf("full carrier ended with %v", destination.Err())
 	}
 	// A call the peer's end cut off is disconnected, not withdrawn, although
-	// its context derives from the peer's. Nightseam v0.6.0's root answered
+	// its context derives from the peer's. nightseam v0.6.0's root answered
 	// cancelled here.
 	var public *core.PublicError
 	if !errors.As(earlier, &public) || public.Code != "disconnected" {

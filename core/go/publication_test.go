@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 runtime/go/publication_test.go (commit
+// Ported from nightseam v0.6.0 runtime/go/publication_test.go (commit
 // 5cc9723a). v0.6.0 served handlers by method name (Options.Handlers) and
 // called through the peer's raw Call and Emit; bitruntime presents the
 // protocol only through the peer's root Endpoint (research R20), so handlers

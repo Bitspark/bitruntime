@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/serial.test.ts. The peer serves
+// Ported from nightseam v0.6.0 runtime/ts/src/serial.test.ts. The peer serves
 // requests only through its root, so a request names a path: the rows of
 // vectors/bitwire-1/serials.json spell the method "echo", which encodes no
 // path, and are answered method_not_found — an answer, which is all the table

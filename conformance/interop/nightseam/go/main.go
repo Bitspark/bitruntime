@@ -1,4 +1,4 @@
-// Command nightseam-interop is Nightseam v0.6.0's Go program of the
+// Command nightseam-interop is nightseam v0.6.0's Go program of the
 // interoperability scenario in conformance/interop/README.md. It is test-only
 // and pinned to the released v0.6.0 in its own module.
 package main

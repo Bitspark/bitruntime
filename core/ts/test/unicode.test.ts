@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/unicode.test.ts. The rows of
+// Ported from nightseam v0.6.0 runtime/ts/src/unicode.test.ts. The rows of
 // vectors/bitwire-1/unicode.json are judged at the raw frame boundary exactly
 // as v0.6.0 judges them. v0.6.0 also held each row to its family validator
 // (validate.ts), which is not part of this port; the runtime's own outgoing

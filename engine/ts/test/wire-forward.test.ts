@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/wire-forward.test.ts, with
+// Ported from nightseam v0.6.0 runtime/ts/src/wire-forward.test.ts, with
 // forward as forward and the wire helpers as the dispatch helpers.
 // Changed, each where it stands: the raw-handler lines of the first test,
 // forward keeping on after a refusal (research 0001 row 14), and the model

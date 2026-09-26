@@ -6,8 +6,8 @@
 // name. It has no application authorization, replay, retries or persistence
 // policy.
 //
-// bitwire/1 is the behavior of Nightseam v0.6.0's nightseam.duplex/1 profile
-// (Bitwire decision 0008). This engine accepts, refuses and sends what that
+// bitwire/1 is the behavior of nightseam v0.6.0's nightseam.duplex/1 profile
+// (bitwire decision 0008). This engine accepts, refuses and sends what that
 // release does; it presents the protocol only through its root Endpoint.
 package engine
 

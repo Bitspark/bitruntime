@@ -42,7 +42,10 @@ The tarball is an npm-compatible package, not an npm registry publication.
 This process does not claim `npm install @bitspark/bitruntime` (or
 `@bitspark/bitruntime-core`) works until registry publication is separately
 configured and verified. Use
-the GitHub release artifact URL for that package in the meantime.
+the GitHub release artifact URL for that package in the meantime. npm 12
+installs a URL dependency only when the consuming project allows it, so the
+README's install instructions name `allow-remote=root`; verify the fresh
+tarball install with npm 12 as well as with the npm bundled beside node.
 
 Never move an existing release tag or overwrite release assets to repair a
 published version. A correction gets a new version.

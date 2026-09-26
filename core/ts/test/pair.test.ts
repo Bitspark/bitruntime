@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/wire-pair.test.ts (wirePair is
+// Ported from nightseam v0.6.0 runtime/ts/src/wire-pair.test.ts (wirePair is
 // now pair, with PairOptions of its own), followed by the regressions of the
 // defects this port fixes: nightseam#722, nightseam#658, R26 and R27.
 import assert from 'node:assert/strict';

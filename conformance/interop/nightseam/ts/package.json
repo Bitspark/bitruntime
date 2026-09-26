@@ -2,7 +2,7 @@
   "name": "bitruntime-interop-nightseam",
   "private": true,
   "type": "module",
-  "description": "Test-only Nightseam v0.6.0 TypeScript program of the interoperability scenario.",
+  "description": "Test-only nightseam v0.6.0 TypeScript program of the interoperability scenario.",
   "license": "Apache-2.0",
   "dependencies": {
     "@bitspark/bitwire": "0.2.0",

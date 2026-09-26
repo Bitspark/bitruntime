@@ -1,6 +1,6 @@
 package engine_test
 
-// Ported from Nightseam v0.6.0 runtime/go/peer_test.go
+// Ported from nightseam v0.6.0 runtime/go/peer_test.go
 // (5cc9723a24646c40ed1861f892b2b23eb6d785d7). The peer's raw method-name API
 // is removed, so every handler is a dispatcher route at the one-segment path
 // [name], installed in Prepare, and every call and event goes through the

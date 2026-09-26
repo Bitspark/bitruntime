@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/peer.test.ts. The peer presents
+// Ported from nightseam v0.6.0 runtime/ts/src/peer.test.ts. The peer presents
 // the protocol only through its root, wire(): what v0.6.0 served with the raw
 // handle and onEvent is served here by a dispatcher on the root, what it sent
 // with the raw call and emit goes through the root with call and emit, and a

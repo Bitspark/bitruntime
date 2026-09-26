@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 runtime/ts/src/dispatcher.test.ts.
+// Ported from nightseam v0.6.0 runtime/ts/src/dispatcher.test.ts.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Endpoint, Message, Receiver } from '@bitspark/bitwire';

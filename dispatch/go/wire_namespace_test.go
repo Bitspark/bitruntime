@@ -83,7 +83,7 @@ func TestDispatcherUsesExactThenLongestSegmentPrefix(t *testing.T) {
 }
 
 // A frame's method name reaches the root's receiver only as the canonical
-// encoding of a path. Nightseam v0.6.0 also registered a raw handler here and
+// encoding of a path. nightseam v0.6.0 also registered a raw handler here and
 // answered its non-path name; bitruntime removed the raw method-name API, so a
 // name that encodes no path is answered method_not_found even beside a root
 // namespace that would take every path.
@@ -244,7 +244,7 @@ func (r ownedEventRegistry) Close(code wire.Code, reason string) error {
 	return r.endpoint.Close(code, reason)
 }
 
-// Nightseam v0.6.0 read the carrier's ending from the server's observer; here
+// nightseam v0.6.0 read the carrier's ending from the server's observer; here
 // the server's connection records the close it was asked for, and the client
 // reads that close on its side of the pipe.
 func TestRegisterEventFailuresEndOnlyTheirCarrierWithSanitizedReason(t *testing.T) {

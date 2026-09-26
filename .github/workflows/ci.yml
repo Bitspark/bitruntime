@@ -34,8 +34,8 @@ jobs:
       - run: npm test
       - run: node scripts/package-smoke.mjs
   interop:
-    # bitruntime and Nightseam v0.6.0, Go and TypeScript, in every pairing over
-    # real WebSockets, and bitruntime's bytes against Nightseam's.
+    # bitruntime and nightseam v0.6.0, Go and TypeScript, in every pairing over
+    # real WebSockets, and bitruntime's bytes against nightseam's.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

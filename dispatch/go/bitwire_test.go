@@ -16,7 +16,7 @@ import (
 
 // These assignments cross the actual public package boundary. bitruntime
 // declares no Message, Receiver or Code of its own: what it presents is
-// Bitwire's types.
+// bitwire's types.
 var _ bitwire.Endpoint = (*dispatch.SelectedEndpoint)(nil)
 var _ dispatch.Registry = (*dispatch.Dispatcher)(nil)
 var _ bitwire.AddressedWire = (*dispatch.Dispatcher)(nil)

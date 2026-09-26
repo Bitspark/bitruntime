@@ -1,6 +1,6 @@
 package core_test
 
-// Ported from Nightseam v0.6.0 runtime/go/wire_pair_test.go (commit 5cc9723a),
+// Ported from nightseam v0.6.0 runtime/go/wire_pair_test.go (commit 5cc9723a),
 // with regression tests for nightseam#722, nightseam#658 and research R26.
 
 import (

@@ -1,5 +1,5 @@
 // Package core constructs full Deixis trees and derives sending from selection.
-// It implements Bitwire's structural contract without a carrier or dispatcher.
+// It implements bitwire's structural contract without a carrier or dispatcher.
 package core
 
 import (

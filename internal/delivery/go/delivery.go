@@ -1,5 +1,5 @@
 // Package delivery is the received context bitruntime's own carriers establish
-// and its own helpers recognize. Bitwire 0.3 lets Go keep that association
+// and its own helpers recognize. bitwire 0.3 lets Go keep that association
 // private to the runtime; this package is internal so that nothing outside
 // bitruntime can construct or claim it. A foreign return capability therefore
 // carries no recognized context, and a message's visible fields never do.

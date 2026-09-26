@@ -34,7 +34,7 @@ const builders = {
   },
   'nightseam-go': () => {
     const out = join(temp, `nightseam-go${exe}`);
-    // Its own module, pinned to the released v0.6.0 and Bitwire 0.2.0.
+    // Its own module, pinned to the released v0.6.0 and bitwire 0.2.0.
     run('go', ['build', '-mod=readonly', '-o', out, '.'], join(interop, 'nightseam', 'go'), {GOWORK: 'off'});
     return [out];
   },

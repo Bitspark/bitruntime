@@ -4,7 +4,7 @@
 // a message in, the close event's code and reason, and the socket surface it
 // reads state and buffered off. The suite is the twin of transporttest, which
 // transports/go runs over the pipe and transports/websocket/go over a real socket.
-// Ported from Nightseam v0.6.0 duplex/ts/src/duplex.test.ts.
+// Ported from nightseam v0.6.0 duplex/ts/src/duplex.test.ts.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { run } from './conformance.ts';

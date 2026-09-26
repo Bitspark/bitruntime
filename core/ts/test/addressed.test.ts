@@ -1,4 +1,4 @@
-// Ported from Nightseam v0.6.0 duplex/ts/src/wire.test.ts. A closed mount now
+// Ported from nightseam v0.6.0 duplex/ts/src/wire.test.ts. A closed mount now
 // reports the one closed classification, `disconnected` (was the duplex
 // wire error 'closed', R26), and a path that selects no child is refused with
 // MissingPathError ('missing_path', was 'no_route').

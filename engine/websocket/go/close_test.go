@@ -15,7 +15,7 @@ import (
 )
 
 // TestAClosingPeerDeliversItsCodeOverAWebSocket: a peer closed from another
-// goroutine while its reader waits must transmit the code it chose. Nightseam
+// goroutine while its reader waits must transmit the code it chose. nightseam
 // v0.6.0 cancelled the reader's context first, and a WebSocket whose pending
 // read is cancelled drops the socket, so the far side often observed 1006.
 func TestAClosingPeerDeliversItsCodeOverAWebSocket(t *testing.T) {
