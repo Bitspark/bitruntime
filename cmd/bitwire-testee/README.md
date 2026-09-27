@@ -14,8 +14,14 @@ v0.6.0's testees (`5cc9723`), with provenance in [`NOTICE`](../../NOTICE).
 | --- | --- | --- |
 | Source | [`go/`](go) | [`ts/src/`](ts/src) |
 | Released as | the module `github.com/Bitspark/bitruntime`, package `cmd/bitwire-testee/go`, at the release tag | the release asset `bitspark-bitruntime-testee-<version>.tgz`, whose `bin` is `bitwire-testee` |
-| Build | `go build -o bitwire-testee github.com/Bitspark/bitruntime/cmd/bitwire-testee/go` inside a module that requires the release (the directory is named `go`, so name the output) | `npm install <asset URL>`; it installs the runtime from the same release's asset |
+| Build | `go build -o bitwire-testee github.com/Bitspark/bitruntime/cmd/bitwire-testee/go` inside a module that requires the release (the directory is named `go`, so name the output) | `npm install <runtime asset URL> <testee asset URL>` (see below) |
 | Run | `./bitwire-testee` | `npx bitwire-testee` |
+
+The TypeScript testee depends on the runtime by the same release's asset URL.
+npm 11 installs it from the testee's URL alone. npm 12 installs URL
+dependencies only as the project allows, and `allow-remote=root` in `.npmrc`
+admits only URLs the project names itself. So name both assets, as above, and
+the runtime's URL is the project's own.
 
 **Claims.** Each testee implements the core layers, `seam` and `peer`, with the
 features `listen` (WebSocket), `pipe`, `lazy` and `propagator`. Tunnel ops

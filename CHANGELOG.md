@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Name both asset URLs when installing the TypeScript testee under npm 12,
+  whose `allow-remote=root` refuses the runtime URL as the testee's own
+  dependency.
+
 ## 0.4.0 (27 September 2026)
 
 - Ship driver-1 testees for bitwire's `bitwire/1` conformance contract
