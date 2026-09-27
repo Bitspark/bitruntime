@@ -1,34 +1,44 @@
-/** The peer under control: DuplexPeer, its canned handlers, its observer. */
-import { createServer } from 'node:http';
-import { WebSocketServer } from 'ws';
+// Ported from nightseam v0.6.0 conformance/ts/src/peer.ts (5cc9723).
+/**
+ * The peer under control: bitruntime's protocol engine, reached only through
+ * its root endpoint and a dispatcher, as a hand-written adapter reaches it.
+ *
+ * A driver-1 `method` or event `name` is the one-segment path [name]: the
+ * engine carries it on the wire as that path's canonical encoding, and
+ * delivers to it only a name that decodes to it. bitruntime has no observer,
+ * so `observe`, `families` and peer.observed are unsupported.
+ */
+import type { Server } from 'node:http';
+import { WebSocket, WebSocketServer } from 'ws';
+import type { Path } from '@bitspark/bitwire';
+import { PublicError, defaultPropagator, respond, type Meta } from '@bitspark/bitruntime/core';
 import {
-  DuplexError,
-  DuplexPeer,
-  identityHandler,
-  checkIdentity,
-  IDENTITY_METHOD,
-  type EventContext,
-  type Meta,
-  type Observer,
-  type ObserverEvent,
-  type PeerOptions,
-  type RequestContext,
-  type Trace,
-} from '@nightseam/runtime';
+  call,
+  createDispatcher,
+  emit,
+  register,
+  type Dispatcher,
+  type EventListener,
+  type Handler,
+} from '@bitspark/bitruntime/dispatch';
+import { PEER_DEFAULTS, Peer, type PeerOptions } from '@bitspark/bitruntime/engine';
+import type { FrameConnection } from '@bitspark/bitruntime/transports';
 import {
   Inbox,
   fail,
-  invalid,
-  unsupported,
-  boolOf,
   intOf,
+  invalid,
   stringOf,
+  unsupported,
   withinOf,
   type Args,
   type Op,
   type Testee,
-} from './testee.ts';
-import { Conn, asLike, isConn } from './seam.ts';
+} from './driver.ts';
+import { asLike, isConn, serve } from './seam.ts';
+
+/** The path a driver-1 method or event name addresses. */
+const pathOf = (name: string): Path => [name];
 
 /** One phase of one request a canned handler served, and what it carried. */
 interface Lifecycle {
@@ -39,123 +49,166 @@ interface Lifecycle {
   meta?: Meta;
 }
 
-/** An observer that keeps what it is told, for peer.observed. */
-class Recorder implements Observer {
-  events: ObserverEvent[] = [];
-  closed?: { code: number; local: boolean };
-  private readonly closedWaiters: Array<() => void> = [];
-  observe(event: ObserverEvent): void {
-    this.events.push(event);
-    if (event.type === 'connection.closed') {
-      this.closed = { code: event.code, local: event.local };
-      for (const waiter of this.closedWaiters.splice(0)) waiter();
-    }
-  }
-  whenClosed(withinMs: number): Promise<boolean> {
-    if (this.closed) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), withinMs);
-      this.closedWaiters.push(() => {
-        clearTimeout(timer);
-        resolve(true);
-      });
-    });
-  }
-  report(withTrace: boolean, drain: boolean): Record<string, unknown>[] {
-    const out = this.events.map((event) => normalize(event, withTrace));
-    if (drain) this.events = [];
-    return out;
-  }
+/** A request handler and an event listener sharing one name's route. */
+interface Route {
+  request?: Handler;
+  event: EventListener;
+  detach: () => void;
 }
 
-const splitTrace = (trace: Trace | undefined): Record<string, unknown> | undefined => {
-  if (!trace?.traceparent) return undefined;
-  const parts = trace.traceparent.split('-');
-  if (parts.length !== 4) return { traceparent: trace.traceparent };
-  const split: Record<string, unknown> = { trace_id: parts[1], span_id: parts[2], flags: parts[3] };
-  if (trace.tracestate) split.state = trace.tracestate;
-  return split;
-};
-
-/** Renders one event as DRIVER.md says every language reports it. */
-const normalize = (event: ObserverEvent, withTrace: boolean): Record<string, unknown> => {
-  const out: Record<string, unknown> = {};
-  const record = event as unknown as Record<string, unknown>;
-  for (const [key, value] of Object.entries(record)) {
-    if (key === 'at' || value === undefined || value === '') continue;
-    switch (key) {
-      case 'trace':
-        if (withTrace) {
-          const split = splitTrace(value as Trace);
-          if (split) out.trace = split;
-        }
-        break;
-      case 'bytes':
-        out.bytes = (value as number) > 0;
-        break;
-      case 'durationMs':
-        out.duration = (value as number) >= 0;
-        break;
-      case 'deadlineMs':
-        out.deadline = (value as number) >= 0;
-        break;
-      case 'errorCode':
-        out.error_code = value;
-        break;
-      default:
-        out[key] = value;
-    }
-  }
-  return out;
-};
-
-/** A peer under control. */
-export class Peer {
+/**
+ * A peer under control: the engine's peer, the dispatcher that owns its
+ * root's one receiver, what it received while the runner was not asking, and
+ * the code its connection ended under.
+ */
+export class Controlled {
   readonly events = new Inbox<{ name: string; data: unknown; meta?: Meta }>();
   readonly requests = new Inbox<Lifecycle>();
-  readonly peer: DuplexPeer;
-  readonly recorder: Recorder;
-  readonly observable: boolean;
-  constructor(peer: DuplexPeer, recorder: Recorder, observable: boolean) {
-    this.peer = peer;
-    this.recorder = recorder;
-    this.observable = observable;
-    peer.onEvent((name, data, context: EventContext) => {
-      this.events.put({ name, data, ...(context.meta ? { meta: context.meta } : {}) });
+  readonly peer: Peer;
+  readonly dispatcher: Dispatcher;
+  /** The peer's own deadline for a call, which its options set. */
+  readonly requestTimeoutMs: number;
+  private readonly routes = new Map<string, Route>();
+  private readonly holds = new Set<{ name: string; release: () => void }>();
+  private ended = false;
+  private code?: number;
+  private readonly closeWaiters = new Set<() => void>();
+
+  constructor(options: PeerOptions) {
+    this.peer = new Peer(options);
+    this.requestTimeoutMs = options.requestTimeoutMs ?? PEER_DEFAULTS.requestTimeoutMs;
+    // Attached before the peer has a connection, so nothing can arrive first.
+    this.dispatcher = createDispatcher(this.peer.wire());
+    // Every name nobody registered: an event is held for peer.await_event, a
+    // request is refused by name as a dispatcher refuses it.
+    this.dispatcher.registerPrefix([], {
+      message: (path, message) => {
+        const frame = message.frame;
+        if (frame.kind === 'event') {
+          if (path.length === 1) this.record(path[0]!, frame.data, frame.meta);
+        } else if (frame.kind === 'request') {
+          respond(message, undefined, new PublicError('method_not_found', 'Unknown method.'));
+        }
+      },
     });
-    peer.onClose(() => {
+    this.peer.onClose(() => {
+      this.ended = true;
       this.events.close();
       this.requests.close();
+      for (const hold of [...this.holds]) hold.release();
     });
   }
+
+  /** Holds one event for peer.await_event, and releases what waits on its name. */
+  record(name: string, data: unknown, meta: Readonly<Meta> | undefined): void {
+    this.events.put({ name, data, ...(meta ? { meta: { ...meta } } : {}) });
+    for (const hold of [...this.holds]) if (hold.name === name) hold.release();
+  }
+
+  /** Replaces what serves one name; an event there is held unless a behaviour says otherwise. */
+  route(name: string, change: { request?: Handler; event?: EventListener }): void {
+    const current = this.routes.get(name);
+    const request = change.request ?? current?.request;
+    const event = change.event ?? current?.event ?? ((data, context) => this.record(name, data, context.meta));
+    current?.detach();
+    this.routes.delete(name);
+    const detach = register(this.dispatcher, pathOf(name), { ...(request ? { request } : {}), event });
+    this.routes.set(name, { ...(request ? { request } : {}), event, detach });
+  }
+
+  /** Settles when the remote emits name after this, or the peer ends. */
+  until(name: string): Promise<void> {
+    if (this.ended) return Promise.resolve();
+    return new Promise((resolve) => {
+      const hold = {
+        name,
+        release: () => {
+          this.holds.delete(hold);
+          resolve();
+        },
+      };
+      this.holds.add(hold);
+    });
+  }
+
+  /** The WebSocket the peer runs over tells the code the connection ended under. */
+  watch(socket: WebSocket): void {
+    socket.on('error', () => {
+      /* Its close reports it. */
+    });
+    socket.on('close', (code: number) => this.closedWith(code));
+  }
+
+  /** So does a frames connection handed to the peer, where no socket is in sight. */
+  watchConnection(connection: FrameConnection): void {
+    connection.listen({
+      close: (code) => this.closedWith(code),
+      error: () => this.closedWith(1006),
+    });
+  }
+
+  private closedWith(code: number): void {
+    if (this.code !== undefined) return;
+    this.code = code;
+    for (const waiter of [...this.closeWaiters]) waiter();
+  }
+
+  /** The code the connection ended under, or undefined when it did not end in time. */
+  closed(withinMs: number): Promise<number | undefined> {
+    if (this.code !== undefined) return Promise.resolve(this.code);
+    return new Promise((resolve) => {
+      const waiter = () => {
+        clearTimeout(timer);
+        this.closeWaiters.delete(waiter);
+        resolve(this.code);
+      };
+      const timer = setTimeout(waiter, withinMs);
+      this.closeWaiters.add(waiter);
+    });
+  }
+
   shutdown(): void {
     this.peer.close();
   }
 }
 
-export const isPeer = (object: unknown): object is Peer => object instanceof Peer;
+export const isPeer = (object: unknown): object is Controlled => object instanceof Controlled;
 
+/** A listener accepting one peer at a URL, as the server. */
 class PeerListener {
-  readonly accepted = new Inbox<Peer>();
-  readonly close: () => void;
-  url = '';
-  constructor(close: () => void) {
-    this.close = close;
+  readonly accepted: Inbox<Controlled>;
+  readonly made: Controlled[];
+  readonly server: Server;
+  readonly sockets: WebSocketServer;
+  readonly url: string;
+  constructor(
+    accepted: Inbox<Controlled>,
+    made: Controlled[],
+    served: { server: Server; sockets: WebSocketServer; url: string },
+  ) {
+    this.accepted = accepted;
+    this.made = made;
+    this.server = served.server;
+    this.sockets = served.sockets;
+    this.url = served.url;
   }
   shutdown(): void {
-    this.close();
+    this.accepted.close();
+    this.sockets.close();
+    this.server.close();
+    // A peer nobody accepted is no handle's; the reset ends it here.
+    for (const peer of this.made) peer.shutdown();
+    for (const client of this.sockets.clients) client.terminate();
   }
 }
 
 const isPeerListener = (object: unknown): object is PeerListener => object instanceof PeerListener;
 
-/** One call in flight. A live invocation is one of these too: it is a call like any other. */
-export class Call {
-  readonly peer: Peer;
+/** One call in flight. */
+class Call {
   readonly promise: Promise<unknown>;
   readonly controller: AbortController;
-  constructor(peer: Peer, promise: Promise<unknown>, controller: AbortController) {
-    this.peer = peer;
+  constructor(promise: Promise<unknown>, controller: AbortController) {
     this.promise = promise;
     this.controller = controller;
     promise.catch(() => {
@@ -164,23 +217,24 @@ export class Call {
   }
 }
 
-export const isCall = (object: unknown): object is Call => object instanceof Call;
+const isCall = (object: unknown): object is Call => object instanceof Call;
 
 /** How a call ended, as the driver's codes. */
-const callError = (error: DuplexError, peer: Peer): Record<string, unknown> => {
+const callError = (error: unknown): Record<string, unknown> => {
+  if (!(error instanceof PublicError)) return { code: 'internal', message: String(error) };
   switch (error.code) {
     case 'cancelled':
-      return { code: 'cancelled', message: error.message };
     case 'request_timeout':
-      return { code: 'request_timeout', message: error.message };
     case 'disconnected':
+      return { code: error.code, message: error.message };
     case 'not_connected':
     case 'connection_failed':
       return { code: 'disconnected', message: error.message };
+    case 'send_failed':
+      return { code: 'failed', message: error.message };
   }
   const out: Record<string, unknown> = { code: error.code, message: error.message };
   if (error.data !== undefined) out.data = error.data;
-  void peer;
   return out;
 };
 
@@ -197,17 +251,16 @@ interface Behavior {
   until?: string;
 }
 
+const BEHAVIORS = new Set(['echo', 'return', 'fail', 'wait', 'hold', 'panic', 'reverse', 'emit']);
+
 const behaviorOf = (args: Args): Behavior => {
   const raw = args.behavior;
   if (raw === undefined) return { kind: '' };
-  if (typeof raw !== 'object' || raw === null) throw invalid('behavior is an object');
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw invalid('behavior is an object');
   return raw as Behavior;
 };
 
-/**
- * The carriage a step gave a call or an event, and undefined where it gave
- * none: an object of strings, as the profile's member is.
- */
+/** The carriage a step gave a call or an event, and undefined where it gave none. */
 const metaOf = (args: Args): Meta | undefined => {
   const raw = args.meta;
   if (raw === undefined) return undefined;
@@ -218,15 +271,19 @@ const metaOf = (args: Args): Meta | undefined => {
   return raw as Meta;
 };
 
+/** What the panic behaviours give up with. */
+const panicValue = (value: unknown): string =>
+  typeof value === 'string' ? value : JSON.stringify(value ?? 'the handler gave up');
+
 /** A handler that does what its behaviour says and records its lifecycle. */
 const canned =
-  (p: Peer, method: string, b: Behavior) =>
-  async (params: unknown, context: RequestContext): Promise<unknown> => {
+  (p: Controlled, method: string, b: Behavior): Handler =>
+  async (params, context) => {
     p.requests.put({
       id: context.requestId,
       method,
       phase: 'started',
-      ...(context.meta ? { meta: context.meta } : {}),
+      ...(context.meta ? { meta: { ...context.meta } } : {}),
     });
     const ended = (outcome: string) => p.requests.put({ id: context.requestId, method, phase: 'ended', outcome });
     try {
@@ -239,47 +296,43 @@ const canned =
           result = b.value ?? null;
           break;
         case 'fail':
-          throw new DuplexError(b.code ?? 'internal', b.message ?? '', b.data);
+          throw new PublicError(b.code ?? 'internal', b.message ?? '', b.data);
         case 'wait':
           await new Promise<void>((resolve) => {
             if (context.signal.aborted) resolve();
             else context.signal.addEventListener('abort', () => resolve(), { once: true });
           });
-          // Completing with an aborted signal lets the peer observe its own
-          // cancellation; throwing DuplexError would be a public refusal.
+          // Returning with an aborted signal is the handler seeing its own
+          // cancellation; the dispatcher answers it cancelled. A PublicError
+          // would be a public refusal instead.
           ended('cancelled');
           return null;
         case 'hold':
-          // The one handler that does not stop when it is told to: it holds the
-          // request until the remote emits what releases it, cancelled or not,
-          // which is how a scenario holds when a withdrawn request is answered.
-          await new Promise<void>((resolve) => {
-            const released = () => {
-              off();
-              ended();
-              resolve();
-            };
-            const off = context.peer.onEvent(b.until ?? '', released);
-            const ended = context.peer.onClose(released);
-          });
+          // The one handler that does not stop when it is told to: it holds
+          // the request until the remote emits what releases it, cancelled or
+          // not, which is how a scenario holds a withdrawn request open.
+          await p.until(b.until ?? '');
           result = b.value ?? null;
           break;
         case 'panic':
-          throw new Error(typeof b.value === 'string' ? b.value : JSON.stringify(b.value ?? 'the handler gave up'));
+          throw new Error(panicValue(b.value));
         case 'reverse':
-          result = await context.peer.call(b.method ?? '', b.params ?? params, { context });
+          result = await call(context.wire, pathOf(b.method ?? ''), b.params ?? params, {
+            context,
+            signal: context.signal,
+          });
           break;
         case 'emit':
-          await context.peer.emit(b.event ?? '', b.data ?? null, { context });
+          emit(context.wire, pathOf(b.event ?? ''), b.data ?? null, { context });
           result = b.then ?? null;
           break;
         default:
-          throw new DuplexError('internal', `no such behaviour: ${b.kind}`);
+          throw new PublicError('internal', `no such behaviour: ${b.kind}`);
       }
       ended('ok');
       return result;
     } catch (error) {
-      if (error instanceof DuplexError) ended(context.signal.aborted ? 'cancelled' : 'error');
+      if (error instanceof PublicError) ended(context.signal.aborted ? 'cancelled' : 'error');
       else ended('panic');
       throw error;
     }
@@ -287,7 +340,7 @@ const canned =
 
 /**
  * What a peer.listen selects from or a peer.dial offers at the handshake;
- * absent, none is offered and none selected, as the runtimes default.
+ * absent, none is offered and none selected.
  */
 const subprotocolsOf = (args: Args): string[] => {
   const value = args.subprotocols;
@@ -297,13 +350,12 @@ const subprotocolsOf = (args: Args): string[] => {
   return value as string[];
 };
 
-const optionsOf = (args: Args): { options: PeerOptions; recorder: Recorder; observable: boolean } => {
+/** The peer options a step names, as the engine's; the engine validates the bounds. */
+const optionsOf = (args: Args): PeerOptions => {
   const raw = args.options;
-  const recorder = new Recorder();
-  const options: PeerOptions = { observer: recorder };
-  let observable = false;
-  if (raw === undefined) return { options, recorder, observable };
-  if (typeof raw !== 'object' || raw === null) throw invalid('options is an object');
+  const options: PeerOptions = {};
+  if (raw === undefined) return options;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw invalid('options is an object');
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     switch (key) {
       case 'max_frame_bytes':
@@ -321,67 +373,77 @@ const optionsOf = (args: Args): { options: PeerOptions; recorder: Recorder; obse
       case 'write_timeout_ms':
         options.writeTimeoutMs = value as number;
         break;
-      case 'families':
-        options.families = value as Record<string, string>;
+      case 'propagate':
+        if (typeof value !== 'boolean') throw invalid('propagate is a boolean');
+        // Every request carries a trace and a handler's calls are its children:
+        // what the default propagator does, which a peer uses when none is named.
+        if (value) options.propagator = defaultPropagator;
         break;
       case 'observe':
-        observable = value === true;
+        if (value === true) throw unsupported('bitruntime has no observer');
         break;
-      case 'propagate':
+      case 'families':
+        if (value !== null && typeof value === 'object' && Object.keys(value).length > 0)
+          throw unsupported('bitruntime has no observer, and no family labels');
         break;
       default:
         throw unsupported(`option ${key}`);
     }
   }
-  return { options, recorder, observable };
+  return options;
 };
 
+/** A peer made with the step's options; bounds the engine refuses are the step's error. */
+const make = (options: PeerOptions): Controlled => {
+  try {
+    return new Controlled(options);
+  } catch (error) {
+    if (error instanceof PublicError) throw invalid(`${error.code}: ${error.message}`);
+    throw error;
+  }
+};
+
+/** The receive limit a WebSocket beneath a peer has: the peer's own. */
+const limitOf = (options: PeerOptions): number => options.maxFrameBytes ?? PEER_DEFAULTS.maxFrameBytes;
+
 export function peerOps(t: Testee): Record<string, Op> {
-  const peerOf = (args: Args, name = 'on') => t.lookup(args[name], isPeer, 'a peer');
+  const peerOf = (args: Args) => t.lookup(args.on, isPeer, 'a peer');
   return {
-    'peer.listen': (args) =>
-      new Promise((resolve, reject) => {
-        const { options, recorder, observable } = optionsOf(args);
-        const offered = subprotocolsOf(args);
-        const server = createServer();
-        // The selection is the server's, in its own order of preference, and
-        // none where the lists do not meet — ws would otherwise echo the
-        // client's first offer back, which is not what a runtime naming none
-        // does. The reference testee selects none by default; this one too.
-        const handleProtocols = (protocols: Set<string>): string | false =>
-          offered.find((token) => protocols.has(token)) ?? false;
-        const sockets = new WebSocketServer({ server, maxPayload: options.maxFrameBytes ?? 1 << 20, handleProtocols });
-        const listener = new PeerListener(() => {
-          sockets.close();
-          server.close();
-        });
-        let first = true;
-        sockets.on('connection', (socket) => {
+    'peer.listen': async (args) => {
+      const options: PeerOptions = { ...optionsOf(args), role: 'server' };
+      const offered = subprotocolsOf(args);
+      // Refused bounds are this step's answer, not a connection that never comes.
+      make(options);
+      const accepted = new Inbox<Controlled>();
+      const made: Controlled[] = [];
+      let first = true;
+      // The selection is the server's, in its own order of preference, and
+      // none where the lists do not meet; ws would otherwise echo the client's
+      // first offer back, which is not what a server naming none does.
+      const handleProtocols = (protocols: Set<string>): string | false =>
+        offered.find((token) => protocols.has(token)) ?? false;
+      const served = await serve(
+        (server) => new WebSocketServer({ server, maxPayload: limitOf(options), handleProtocols }),
+        (socket) => {
           if (!first) {
             socket.close(1008, 'one connection is accepted');
             return;
           }
           first = false;
-          const peer = new DuplexPeer({ ...options, role: 'server' });
-          const wrapped = new Peer(peer, recorder, observable);
+          const p = new Controlled(options);
+          made.push(p);
+          p.watch(socket);
           // The socket itself, not a connection already wrapped around it: the
           // peer wraps it the same way and reads the selected subprotocol off it.
-          peer.attach(asLike(socket)).then(
-            () => listener.accepted.put(wrapped),
+          p.peer.attach(asLike(socket)).then(
+            () => accepted.put(p),
             () => socket.terminate(),
           );
-        });
-        server.on('error', reject);
-        server.listen(0, '127.0.0.1', () => {
-          const address = server.address();
-          if (!address || typeof address === 'string') {
-            reject(new Error('no address'));
-            return;
-          }
-          listener.url = `ws://127.0.0.1:${address.port}`;
-          resolve({ handle: t.mint('pl', listener), url: listener.url });
-        });
-      }),
+        },
+      );
+      const listener = new PeerListener(accepted, made, served);
+      return { handle: t.mint('pl', listener), url: listener.url };
+    },
     'peer.accept': async (args) => {
       const l = t.lookup(args.on, isPeerListener, 'a peer listener');
       const { item } = await l.accepted.await(withinOf(args), () => true);
@@ -389,64 +451,58 @@ export function peerOps(t: Testee): Record<string, Op> {
       return { handle: t.mint('p', item), subprotocol: item.peer.subprotocol };
     },
     'peer.dial': async (args) => {
-      const { options, recorder, observable } = optionsOf(args);
+      const url = stringOf(args, 'url', true);
+      const base = optionsOf(args);
       const offered = subprotocolsOf(args);
-      const peer = new DuplexPeer({
-        ...options,
+      const limit = limitOf(base);
+      const dialed: { socket?: WebSocket } = {};
+      const p = make({
+        ...base,
         role: 'client',
         ...(offered.length > 0 ? { subprotocols: offered } : {}),
+        webSocketFactory: (target, protocols) => {
+          const socket =
+            protocols && protocols.length > 0
+              ? new WebSocket(target, protocols, { maxPayload: limit })
+              : new WebSocket(target, { maxPayload: limit });
+          dialed.socket = socket;
+          return asLike(socket);
+        },
       });
-      const wrapped = new Peer(peer, recorder, observable);
-      await peer.connect(stringOf(args, 'url', true)).catch((error) => {
-        throw fail('failed', String(error));
-      });
-      return { handle: t.mint('p', wrapped), subprotocol: peer.subprotocol };
+      const connecting = p.peer.connect(url);
+      if (dialed.socket) p.watch(dialed.socket);
+      try {
+        await connecting;
+      } catch (error) {
+        p.shutdown();
+        dialed.socket?.terminate();
+        throw fail('failed', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      }
+      return { handle: t.mint('p', p), subprotocol: p.peer.subprotocol };
     },
     'peer.over': async (args) => {
       const c = t.lookup(args.on, isConn, 'a connection');
       const role = stringOf(args, 'role', true);
       if (role !== 'client' && role !== 'server') throw invalid('role is client or server');
-      const { options, recorder, observable } = optionsOf(args);
-      const peer = new DuplexPeer({ ...options, role });
-      const wrapped = new Peer(peer, recorder, observable);
-      await peer.attach(c.release()).catch((error) => {
-        throw fail('failed', String(error));
+      if (!c.lazy) throw invalid('a peer is made over a lazily consumed connection');
+      const p = make({ ...optionsOf(args), role });
+      const connection = c.release();
+      const attaching = p.peer.attach(connection);
+      // After the peer's own reader, so that the peer is handed every frame.
+      p.watchConnection(connection);
+      await attaching.catch((error: unknown) => {
+        throw fail('failed', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       });
-      return { handle: t.mint('p', wrapped) };
-    },
-    'peer.identity': (args) => {
-      const p = peerOf(args);
-      const path = stringOf(args, 'path', true);
-      const digest = stringOf(args, 'digest');
-      try {
-        p.peer.handle(IDENTITY_METHOD, identityHandler({ path, ...(digest ? { digest } : {}) }));
-      } catch (error) {
-        if (error instanceof DuplexError) throw fail(error.code, error.message);
-        throw error;
-      }
-      return {};
-    },
-    'peer.check_identity': async (args) => {
-      const p = peerOf(args);
-      const path = stringOf(args, 'path', true);
-      const digest = stringOf(args, 'digest');
-      try {
-        await checkIdentity(
-          p.peer.call.bind(p.peer),
-          { path, ...(digest ? { digest } : {}) },
-          { timeoutMs: withinOf(args) },
-        );
-      } catch (error) {
-        if (error instanceof DuplexError) throw fail(error.code, error.message);
-        throw error;
-      }
-      return {};
+      return { handle: t.mint('p', p) };
     },
     'peer.handle': (args) => {
       const p = peerOf(args);
       const method = stringOf(args, 'method', true);
+      const b = behaviorOf(args);
+      if (b.kind === 'through') throw unsupported('the through behaviour belongs to the live layer');
+      if (!BEHAVIORS.has(b.kind)) throw invalid(`no such behaviour: ${b.kind}`);
       try {
-        p.peer.handle(method, canned(p, method, behaviorOf(args)));
+        p.route(method, { request: canned(p, method, b) });
       } catch (error) {
         throw invalid(String(error));
       }
@@ -456,51 +512,64 @@ export function peerOps(t: Testee): Record<string, Op> {
       const p = peerOf(args);
       const name = stringOf(args, 'name', true);
       const b = behaviorOf(args);
+      let event: EventListener;
       switch (b.kind) {
         case '':
         case 'record':
-          return {};
+          event = (data, context) => p.record(name, data, context.meta);
+          break;
         case 'block':
-          p.peer.onEvent(
-            name,
-            () =>
-              new Promise<void>(() => {
-                /* never */
-              }),
-          );
-          return {};
+          event = () =>
+            new Promise<void>(() => {
+              /* never */
+            });
+          break;
         case 'panic':
-          p.peer.onEvent(name, () => {
-            throw new Error(typeof b.value === 'string' ? b.value : 'the handler gave up');
-          });
-          return {};
+          event = () => {
+            throw new Error(panicValue(b.value));
+          };
+          break;
+        default:
+          throw invalid('an event handler records, blocks or panics');
       }
-      throw invalid('an event handler records, blocks or panics');
+      try {
+        p.route(name, { event });
+      } catch (error) {
+        throw invalid(String(error));
+      }
+      return {};
     },
     'peer.call': (args) => {
       const p = peerOf(args);
       const method = stringOf(args, 'method', true);
       const timeout = intOf(args, 'timeout_ms', 0);
-      const controller = new AbortController();
+      if (timeout < 0) throw invalid('timeout_ms is not negative');
       const meta = metaOf(args);
-      const promise = p.peer.call(method, args.params ?? null, {
+      const controller = new AbortController();
+      // Absent, the call has only the peer's deadline, which is the one it
+      // waits for as well.
+      const promise = call(p.dispatcher, pathOf(method), args.params === undefined ? null : args.params, {
         signal: controller.signal,
-        ...(timeout > 0 ? { timeoutMs: timeout } : {}),
+        timeoutMs: timeout > 0 ? timeout : p.requestTimeoutMs,
         ...(meta ? { meta } : {}),
       });
-      return { handle: t.mint('call', new Call(p, promise, controller)) };
+      return { handle: t.mint('call', new Call(promise, controller)) };
     },
     'call.await': async (args) => {
       const c = t.lookup(args.on, isCall, 'a call');
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const settled = await Promise.race([
         c.promise.then(
           (result) => ({ result }),
-          (error: DuplexError) => ({ error }),
+          (error: unknown) => ({ error }),
         ),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), withinOf(args))),
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), withinOf(args));
+        }),
       ]);
+      clearTimeout(timer);
       if (settled === undefined) throw fail('timeout', 'no response');
-      if ('error' in settled) return { error: callError(settled.error, c.peer) };
+      if ('error' in settled) return { error: callError(settled.error) };
       return { result: settled.result ?? null };
     },
     'call.cancel': (args) => {
@@ -508,18 +577,19 @@ export function peerOps(t: Testee): Record<string, Op> {
       c.controller.abort();
       return {};
     },
-    'peer.emit': async (args) => {
+    'peer.emit': (args) => {
       const p = peerOf(args);
       const event = stringOf(args, 'event', true);
-      const settled = await Promise.race([
-        p.peer.emit(event, args.data ?? null, { ...(metaOf(args) ? { meta: metaOf(args) as Meta } : {}) }).then(
-          () => 'ok' as const,
-          (error: DuplexError) => error,
-        ),
-        new Promise<'late'>((resolve) => setTimeout(() => resolve('late'), withinOf(args))),
-      ]);
-      if (settled === 'late') throw fail('timeout', 'the event was not sent');
-      if (settled !== 'ok') throw fail('disconnected', settled.message);
+      const meta = metaOf(args);
+      withinOf(args);
+      // Accepted for sending is the whole of an emit: it never waits.
+      try {
+        emit(p.dispatcher, pathOf(event), args.data === undefined ? null : args.data, meta ? { meta } : {});
+      } catch (error) {
+        if (!(error instanceof PublicError)) throw error;
+        if (error.code === 'disconnected' || error.code === 'not_connected') throw fail('disconnected', error.message);
+        throw fail(error.code, error.message);
+      }
       return {};
     },
     'peer.await_event': async (args) => {
@@ -534,14 +604,10 @@ export function peerOps(t: Testee): Record<string, Op> {
       const p = peerOf(args);
       const method = stringOf(args, 'method', true);
       const phase = stringOf(args, 'phase', true);
+      if (phase !== 'started' && phase !== 'ended') throw invalid('phase is started or ended');
       const { item } = await p.requests.await(withinOf(args), (l) => l.method === method && l.phase === phase);
       if (!item) throw fail('timeout', `no ${method} ${phase}`);
       return item;
-    },
-    'peer.observed': (args) => {
-      const p = peerOf(args);
-      if (!p.observable) throw invalid('the peer was made without observe');
-      return p.recorder.report(boolOf(args, 'trace'), boolOf(args, 'drain', true));
     },
     'peer.close': (args) => {
       peerOf(args).peer.close();
@@ -549,13 +615,12 @@ export function peerOps(t: Testee): Record<string, Op> {
     },
     'peer.await_close': async (args) => {
       const p = peerOf(args);
-      if (!(await p.recorder.whenClosed(withinOf(args)))) throw fail('timeout', 'the peer did not end');
+      const code = await p.closed(withinOf(args));
+      if (code === undefined) throw fail('timeout', 'the peer did not end');
       // Clean is a close somebody chose, whichever side: a peer closes with
-      // 1000 by choice and with a code of its own when it refuses a frame, and
-      // 1006 is what a side that aborted leaves behind.
-      return { clean: p.recorder.closed!.code === 1000, code: p.recorder.closed!.code };
+      // 1000 by choice and with a code of its own when it refuses a frame,
+      // and 1006 is what a side that aborted leaves behind.
+      return { clean: code === 1000, code };
     },
   };
 }
-
-// Keep the seam's Conn in this module's type graph for peer.over.

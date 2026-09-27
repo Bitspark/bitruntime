@@ -1,9 +1,16 @@
-// The Go testee: Nightseam's Go runtime and tunnel under the
-// control of the conformance runner, over the protocol of
-// conformance/DRIVER.md. It is the reference implementation the suite holds
-// every other language to, and a worked example of what a testee is: a
-// loop reading one request per line, a table of handles, an inbox per
-// handle for what arrived unasked, and nothing on stdout but answers.
+// Ported from nightseam v0.6.0 conformance/go/testee/main.go (5cc9723).
+
+// Command bitwire-testee puts bitruntime's Go peer under the control of a
+// bitwire/1 conformance runner, over driver 1 of bitwire's conformance
+// contract (conformance/protocol/CONTRACT.md). It is a worked example of what
+// a testee is: a loop reading one request per line, a table of handles, an
+// inbox per handle for what arrived unasked, and nothing on stdout but
+// answers.
+//
+// It claims the core: the seam (conn.*) and the peer (peer.*, call.*).
+// bitruntime implements neither the tunnel nor live references yet and has no
+// observer, so those ops, and the peer options that ask for an observer,
+// answer unsupported.
 package main
 
 import (
@@ -25,9 +32,7 @@ func main() {
 	for {
 		line, err := in.ReadBytes('\n')
 		if len(bytes.TrimSpace(line)) > 0 {
-			answer := t.serve(line)
-			data, _ := json.Marshal(answer)
-			out.Write(data)
+			out.Write(t.serve(line).encode())
 			out.WriteByte('\n')
 			out.Flush()
 			if t.bye {
@@ -50,12 +55,23 @@ type request struct {
 }
 
 type answer struct {
-	ID    int   `json:"id"`
-	OK    any   `json:"ok,omitempty"`
-	Error error `json:"error,omitempty"`
+	ID    int      `json:"id"`
+	OK    any      `json:"ok,omitempty"`
+	Error *failure `json:"error,omitempty"`
 }
 
-// failure is an error answer: the protocol's codes, or the remote's.
+// encode is the answer's line. An answer that cannot be encoded — a payload
+// that is not JSON — is answered as the testee's own failure, since a line
+// that is not an answer would leave the runner holding the testee dead.
+func (a answer) encode() []byte {
+	data, err := json.Marshal(a)
+	if err != nil {
+		data, _ = json.Marshal(answer{ID: a.ID, Error: fail("internal", "the answer could not be encoded: %v", err)})
+	}
+	return data
+}
+
+// failure is an error answer: the driver's codes, or the remote's.
 type failure struct {
 	Code    string         `json:"code"`
 	Message string         `json:"message"`
@@ -77,6 +93,7 @@ func fail(code, format string, args ...any) *failure {
 }
 
 func unsupported(what string) *failure { return fail("unsupported", "%s", what) }
+
 func invalid(format string, args ...any) *failure {
 	return fail("invalid", format, args...)
 }
@@ -86,10 +103,15 @@ type testee struct {
 	mu      sync.Mutex
 	next    int
 	handles map[string]any
+	table   map[string]func(request) (any, error)
 	bye     bool
 }
 
-func newTestee() *testee { return &testee{handles: map[string]any{}} }
+func newTestee() *testee {
+	t := &testee{handles: map[string]any{}}
+	t.table = t.ops()
+	return t
+}
 
 func (t *testee) mint(prefix string, object any) string {
 	t.mu.Lock()
@@ -107,19 +129,42 @@ func (t *testee) lookup(handle string) (any, bool) {
 	return object, ok
 }
 
+// object is what the request's on names, as the kind its op takes: an
+// unknown handle is unknown_handle, and one of another kind is invalid.
+func object[T any](t *testee, r request, kind string) (T, error) {
+	var zero T
+	handle, err := r.mustString("on")
+	if err != nil {
+		return zero, err
+	}
+	o, ok := t.lookup(handle)
+	if !ok {
+		return zero, fail("unknown_handle", "%s", handle)
+	}
+	typed, ok := o.(T)
+	if !ok {
+		return zero, invalid("%s is not a %s", handle, kind)
+	}
+	return typed, nil
+}
+
 // closer is what a handle's object does when the testee resets.
 type closer interface{ shutdown() }
 
+// reset forgets every handle and shuts every object down, all at once, so
+// that no close handshake waits on another.
 func (t *testee) reset() {
 	t.mu.Lock()
 	objects := t.handles
 	t.handles = map[string]any{}
 	t.mu.Unlock()
-	for _, object := range objects {
-		if c, ok := object.(closer); ok {
-			c.shutdown()
+	var shut sync.WaitGroup
+	for _, o := range objects {
+		if c, ok := o.(closer); ok {
+			shut.Go(c.shutdown)
 		}
 	}
+	shut.Wait()
 }
 
 func (t *testee) serve(line []byte) answer {
@@ -140,10 +185,8 @@ func (t *testee) serve(line []byte) answer {
 	delete(raw, "op")
 	ok, err := t.dispatch(r)
 	if err != nil {
-		var f *failure
-		if e, is := err.(*failure); is {
-			f = e
-		} else {
+		f, is := err.(*failure)
+		if !is {
 			f = fail("internal", "%v", err)
 		}
 		return answer{ID: r.id, Error: f}
@@ -160,8 +203,8 @@ func (t *testee) dispatch(r request) (any, error) {
 		return map[string]any{
 			"driver":   driverVersion,
 			"language": "go",
-			"layers":   []string{"seam", "peer", "tunnel", "live"},
-			"features": []string{"listen", "pipe", "observer", "propagator", "lazy"},
+			"layers":   []string{"seam", "peer"},
+			"features": []string{"listen", "pipe", "lazy", "propagator"},
 		}, nil
 	case "reset":
 		t.reset()
@@ -170,7 +213,7 @@ func (t *testee) dispatch(r request) (any, error) {
 		t.bye = true
 		return nil, nil
 	}
-	if handler, ok := t.ops()[r.op]; ok {
+	if handler, ok := t.table[r.op]; ok {
 		return handler(r)
 	}
 	return nil, unsupported("no such op: " + r.op)
@@ -211,23 +254,13 @@ func (r request) int(name string, fallback int64) (int64, error) {
 	return n, nil
 }
 
-func (r request) bool(name string) (bool, error) {
-	raw, ok := r.args[name]
-	if !ok {
-		return false, nil
-	}
-	var b bool
-	if err := json.Unmarshal(raw, &b); err != nil {
-		return false, invalid("%s is a boolean", name)
-	}
-	return b, nil
-}
-
 func (r request) within() (time.Duration, error) {
 	ms, err := r.int("within_ms", 5000)
 	return time.Duration(ms) * time.Millisecond, err
 }
 
+// raw is a payload as the runner wrote it, handed on without decoding, or
+// nil where the request has none.
 func (r request) raw(name string) json.RawMessage {
 	raw, ok := r.args[name]
 	if !ok {
@@ -241,14 +274,23 @@ func (r request) object(name string) (map[string]json.RawMessage, error) {
 	if !ok {
 		return nil, nil
 	}
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &object); err != nil {
+	var o map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &o); err != nil {
 		return nil, invalid("%s is an object", name)
 	}
-	return object, nil
+	return o, nil
 }
 
-// inbox holds what arrived unasked, in order, for await and drain.
+// payload is a JSON value as it travels in an answer: its bytes as they
+// arrived, and null where there were none.
+func payload(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	return raw
+}
+
+// inbox holds what arrived unasked, in order, for await.
 type inbox[T any] struct {
 	mu    sync.Mutex
 	cond  *sync.Cond
@@ -281,7 +323,13 @@ func (b *inbox[T]) close() {
 // within for one; false when none came in time, or none will.
 func (b *inbox[T]) await(within time.Duration, accept func(T) bool) (T, bool, bool) {
 	deadline := time.Now().Add(within)
-	timer := time.AfterFunc(within, func() { b.cond.Broadcast() })
+	// The deadline wakes the waiter under the lock, so that it cannot pass
+	// between the waiter's look at the clock and its wait.
+	timer := time.AfterFunc(within, func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.cond.Broadcast()
+	})
 	defer timer.Stop()
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -302,15 +350,4 @@ func (b *inbox[T]) await(within time.Duration, accept func(T) bool) (T, bool, bo
 		}
 		b.cond.Wait()
 	}
-}
-
-// drain returns everything held, and empties the inbox when asked.
-func (b *inbox[T]) drain(empty bool) []T {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	out := append([]T(nil), b.items...)
-	if empty {
-		b.items = nil
-	}
-	return out
 }

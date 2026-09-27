@@ -1,3 +1,5 @@
+// Ported from nightseam v0.6.0 conformance/go/testee/conn.go (5cc9723).
+
 package main
 
 import (
@@ -11,8 +13,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/Bitspark/nightseam/duplex/go"
-	"github.com/Bitspark/nightseam/duplex/go/ws"
+	transports "github.com/Bitspark/bitruntime/transports/go"
+	ws "github.com/Bitspark/bitruntime/transports/websocket/go"
 )
 
 // A connection under control: the seam's Conn, and what it received
@@ -20,7 +22,7 @@ import (
 // arrive; lazy reads only when conn.receive asks, which is the one way a
 // sender is made to wait.
 type conn struct {
-	duplex.Conn
+	transports.Conn
 	lazy   bool
 	frames *inbox[received]
 	ended  chan struct{}
@@ -31,11 +33,11 @@ type conn struct {
 
 // received is one frame, or the error that ended receiving.
 type received struct {
-	frame duplex.Frame
+	frame transports.Frame
 	err   error
 }
 
-func wrap(c duplex.Conn, lazy bool) *conn {
+func wrap(c transports.Conn, lazy bool) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	w := &conn{Conn: c, lazy: lazy, frames: newInbox[received](), ended: make(chan struct{}), cancel: cancel}
 	if !lazy {
@@ -65,19 +67,19 @@ func (c *conn) finish(err error) {
 func (c *conn) shutdown() {
 	c.cancel()
 	_ = c.Abort()
-	c.finish(duplex.ErrClosed)
+	c.finish(transports.ErrClosed)
 }
 
 // receive is the next frame: what the reader held, or, lazily, what the
 // connection gives now.
-func (c *conn) receive(within time.Duration) (duplex.Frame, error) {
+func (c *conn) receive(within time.Duration) (transports.Frame, error) {
 	if c.lazy {
 		ctx, cancel := context.WithTimeout(context.Background(), within)
 		defer cancel()
 		frame, err := c.Receive(ctx)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				return duplex.Frame{}, fail("timeout", "nothing received within %s", within)
+				return transports.Frame{}, fail("timeout", "nothing received within %s", within)
 			}
 			c.finish(err)
 		}
@@ -85,12 +87,12 @@ func (c *conn) receive(within time.Duration) (duplex.Frame, error) {
 	}
 	item, ok, _ := c.frames.await(within, func(received) bool { return true })
 	if !ok {
-		return duplex.Frame{}, fail("timeout", "nothing received within %s", within)
+		return transports.Frame{}, fail("timeout", "nothing received within %s", within)
 	}
 	if item.err != nil {
 		// A close stays the first thing every later receive sees.
 		c.frames.put(item)
-		return duplex.Frame{}, item.err
+		return transports.Frame{}, item.err
 	}
 	return item.frame, nil
 }
@@ -98,13 +100,13 @@ func (c *conn) receive(within time.Duration) (duplex.Frame, error) {
 // closeError renders how a connection ended as the driver's error: closed
 // with the remote's code and reason, or failed.
 func closeError(err error) *failure {
-	var closeErr *duplex.CloseError
+	var closeErr *transports.CloseError
 	if errors.As(err, &closeErr) {
 		f := fail("closed", "%v", err)
 		f.Members = map[string]any{"close_code": int(closeErr.Code), "reason": closeErr.Reason}
 		return f
 	}
-	if errors.Is(err, duplex.ErrClosed) {
+	if errors.Is(err, transports.ErrClosed) {
 		return fail("closed", "%v", err)
 	}
 	return fail("failed", "%v", err)
@@ -114,8 +116,7 @@ func closeError(err error) *failure {
 type listener struct {
 	server   *http.Server
 	url      string
-	accepted chan duplex.Conn
-	limit    int64
+	accepted chan transports.Conn
 }
 
 func listen(limit int64) (*listener, error) {
@@ -123,7 +124,7 @@ func listen(limit int64) (*listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &listener{accepted: make(chan duplex.Conn, 1), limit: limit, url: "ws://" + socket.Addr().String()}
+	l := &listener{accepted: make(chan transports.Conn, 1), url: "ws://" + socket.Addr().String()}
 	l.server = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
@@ -139,9 +140,17 @@ func listen(limit int64) (*listener, error) {
 	return l, nil
 }
 
-func (l *listener) shutdown() { _ = l.server.Close() }
+// shutdown stops listening, and aborts a connection nobody accepted.
+func (l *listener) shutdown() {
+	_ = l.server.Close()
+	select {
+	case c := <-l.accepted:
+		_ = c.Abort()
+	default:
+	}
+}
 
-func dial(url string, limit int64) (duplex.Conn, error) {
+func dial(url string, limit int64) (transports.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	socket, _, err := websocket.Dial(ctx, url, nil)
@@ -149,22 +158,6 @@ func dial(url string, limit int64) (duplex.Conn, error) {
 		return nil, err
 	}
 	return ws.New(socket, limit), nil
-}
-
-func (t *testee) connOf(r request) (*conn, error) {
-	handle, err := r.mustString("on")
-	if err != nil {
-		return nil, err
-	}
-	object, ok := t.lookup(handle)
-	if !ok {
-		return nil, fail("unknown_handle", "%s", handle)
-	}
-	c, ok := object.(*conn)
-	if !ok {
-		return nil, invalid("%s is not a connection", handle)
-	}
-	return c, nil
 }
 
 func (r request) lazy() (bool, error) {
@@ -195,14 +188,9 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			return map[string]any{"handle": t.mint("l", l), "url": l.url}, nil
 		},
 		"conn.accept": func(r request) (any, error) {
-			handle, err := r.mustString("on")
+			l, err := object[*listener](t, r, "listener")
 			if err != nil {
 				return nil, err
-			}
-			object, ok := t.lookup(handle)
-			l, isListener := object.(*listener)
-			if !ok || !isListener {
-				return nil, fail("unknown_handle", "%s is not a listener", handle)
 			}
 			within, err := r.within()
 			if err != nil {
@@ -247,11 +235,11 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			a, b := duplex.Pipe(limit)
+			a, b := transports.Pipe(limit)
 			return map[string]any{"a": t.mint("c", wrap(a, lazy)), "b": t.mint("c", wrap(b, lazy))}, nil
 		},
 		"conn.send": func(r request) (any, error) {
-			c, err := t.connOf(r)
+			c, err := object[*conn](t, r, "connection")
 			if err != nil {
 				return nil, err
 			}
@@ -263,14 +251,14 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			if err != nil {
 				return nil, err
 			}
-			frame := duplex.Frame{}
+			var frame transports.Frame
 			switch kind {
 			case "text":
 				text, err := r.string("text")
 				if err != nil {
 					return nil, err
 				}
-				frame = duplex.Frame{Kind: duplex.Text, Data: []byte(text)}
+				frame = transports.Frame{Kind: transports.Text, Data: []byte(text)}
 			case "binary":
 				encoded, err := r.string("base64")
 				if err != nil {
@@ -280,7 +268,7 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 				if err != nil {
 					return nil, invalid("base64: %v", err)
 				}
-				frame = duplex.Frame{Kind: duplex.Binary, Data: data}
+				frame = transports.Frame{Kind: transports.Binary, Data: data}
 			default:
 				return nil, invalid("kind is text or binary")
 			}
@@ -295,7 +283,7 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			return nil, nil
 		},
 		"conn.receive": func(r request) (any, error) {
-			c, err := t.connOf(r)
+			c, err := object[*conn](t, r, "connection")
 			if err != nil {
 				return nil, err
 			}
@@ -310,17 +298,17 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 				}
 				return nil, closeError(err)
 			}
-			if frame.Kind == duplex.Binary {
+			if frame.Kind == transports.Binary {
 				return map[string]any{"kind": "binary", "base64": base64.StdEncoding.EncodeToString(frame.Data)}, nil
 			}
 			return map[string]any{"kind": "text", "text": string(frame.Data)}, nil
 		},
 		"conn.close": func(r request) (any, error) {
-			c, err := t.connOf(r)
+			c, err := object[*conn](t, r, "connection")
 			if err != nil {
 				return nil, err
 			}
-			code, err := r.int("code", int64(duplex.CodeNormal))
+			code, err := r.int("code", int64(transports.CodeNormal))
 			if err != nil {
 				return nil, err
 			}
@@ -334,9 +322,13 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), within)
 			defer cancel()
-			err = c.Close(ctx, duplex.Code(code), reason)
-			c.finish(duplex.ErrClosed)
-			if err != nil && !errors.Is(err, duplex.ErrClosed) {
+			err = c.Close(ctx, transports.Code(code), reason)
+			if errors.Is(err, transports.ErrUnsendableCode) {
+				// Nothing was sent and the connection stays as it was.
+				return nil, invalid("close code %d may only be observed", code)
+			}
+			c.finish(transports.ErrClosed)
+			if err != nil && !errors.Is(err, transports.ErrClosed) {
 				if errors.Is(err, context.DeadlineExceeded) {
 					return nil, fail("timeout", "the close did not complete within %s", within)
 				}
@@ -345,16 +337,16 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			return nil, nil
 		},
 		"conn.abort": func(r request) (any, error) {
-			c, err := t.connOf(r)
+			c, err := object[*conn](t, r, "connection")
 			if err != nil {
 				return nil, err
 			}
 			_ = c.Abort()
-			c.finish(duplex.ErrClosed)
+			c.finish(transports.ErrClosed)
 			return nil, nil
 		},
 		"conn.await_close": func(r request) (any, error) {
-			c, err := t.connOf(r)
+			c, err := object[*conn](t, r, "connection")
 			if err != nil {
 				return nil, err
 			}
@@ -381,11 +373,11 @@ func (t *testee) seamOps() map[string]func(request) (any, error) {
 			case <-time.After(within):
 				return nil, fail("timeout", "the connection did not end within %s", within)
 			}
-			var closeErr *duplex.CloseError
+			var closeErr *transports.CloseError
 			if errors.As(c.end, &closeErr) {
 				return map[string]any{"code": int(closeErr.Code), "reason": closeErr.Reason}, nil
 			}
-			return map[string]any{"code": int(duplex.CodeAbnormalClosure), "reason": ""}, nil
+			return map[string]any{"code": int(transports.CodeAbnormalClosure), "reason": ""}, nil
 		},
 	}
 }

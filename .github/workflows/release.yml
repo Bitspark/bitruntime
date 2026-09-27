@@ -34,6 +34,8 @@ jobs:
         run: |
           mkdir release
           npm pack . --pack-destination release
+          node scripts/testee-package.mjs release
+          node scripts/testee-smoke.mjs release/bitspark-bitruntime-"${GITHUB_REF_NAME#v}".tgz release/bitspark-bitruntime-testee-"${GITHUB_REF_NAME#v}".tgz
           cd release
           sha256sum *.tgz > SHA256SUMS
       - name: Publish source and package artifacts
