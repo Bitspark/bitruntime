@@ -354,3 +354,20 @@ async function settled(): Promise<void> {
       setTimeout(resolve, 2);
     });
 }
+
+test('a pipe with a limit delivers a frame at it and ends both ends with 1009 over it (bitruntime#26)', async () => {
+  const [a, b] = pipe(8);
+  const closes: Array<[string, number, string]> = [];
+  const frames: unknown[] = [];
+  a.listen({ close: (code, reason) => closes.push(['a', code, reason]) });
+  b.listen({ frame: (frame) => frames.push(frame.data), close: (code, reason) => closes.push(['b', code, reason]) });
+  a.send({ kind: 'text', data: '12345678' });
+  // Five two-byte scalars: 10 bytes of UTF-8, over the limit of 8.
+  a.send({ kind: 'text', data: 'é'.repeat(5) });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(frames, ['12345678']);
+  assert.deepEqual(closes.map(([side, code]) => [side, code]).sort(), [['a', 1009], ['b', 1009]]);
+  assert.equal(a.state, 'closed');
+  assert.equal(b.state, 'closed');
+  assert.throws(() => pipe(-1), RangeError);
+});

@@ -153,6 +153,10 @@ func Run(t *testing.T, connect Connect) {
 			t.Fatalf("a frame of %d bytes was delivered over a limit of 1024", len(frame.Data))
 		} else if !errors.Is(err, transports.ErrClosed) {
 			t.Fatalf("refusing a frame over the limit is not a closed carrier: %v", err)
+		} else if refused := new(transports.CloseError); !errors.As(err, &refused) || refused.Code != transports.CodeTooLarge || !refused.Local {
+			// The receiver ended the connection with 1009, and its own error
+			// says so, as an observer of its side must be able to report.
+			t.Fatalf("the receiver of a frame over the limit reported %v, not the 1009 it refused with", err)
 		}
 		if _, err := b.Receive(ctx); err == nil {
 			t.Fatal("the connection received again after refusing a frame over the limit")

@@ -118,8 +118,8 @@ To install a release, require the Go module at its tag and the TypeScript
 package from its release asset:
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.4.1
-npm install https://github.com/Bitspark/bitruntime/releases/download/v0.4.1/bitspark-bitruntime-0.4.1.tgz
+go get github.com/Bitspark/bitruntime@v0.4.2
+npm install https://github.com/Bitspark/bitruntime/releases/download/v0.4.2/bitspark-bitruntime-0.4.2.tgz
 ```
 
 npm 12 refuses dependencies that are tarball URLs unless the project allows

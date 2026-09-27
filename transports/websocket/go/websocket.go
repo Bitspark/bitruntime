@@ -97,7 +97,8 @@ func (c *connection) Receive(ctx context.Context) (transports.Frame, error) {
 			// 1009 if it read it first, or the dropped transport otherwise.
 			c.end()
 			_ = c.conn.CloseNow()
-			return transports.Frame{}, fmt.Errorf("%w: %w", transports.ErrClosed, err)
+			// The receiver's own error carries the 1009 it refused with.
+			return transports.Frame{}, fmt.Errorf("%w: %w", &transports.CloseError{Code: transports.CodeTooLarge, Reason: "frame exceeds the receive limit", Local: true}, err)
 		}
 		return transports.Frame{}, c.translate(ctx, err)
 	}

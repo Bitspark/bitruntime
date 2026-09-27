@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2 (27 September 2026)
+
+- The TypeScript `pipe(limit)` takes a receive limit, as Go's `Pipe(limit)`
+  does: a frame over it ends the pipe with 1009 on both ends (bitruntime#26).
+- A Go transport that refuses a frame over its receive limit now reports that
+  refusal to its own side as a `*CloseError` with code 1009 and the new
+  `Local` field set, still a closed carrier. Before, the receiver got a bare
+  closed error, so an observer of its side read 1006. The transport
+  conformance suite requires this of every transport.
+- The testees use both: the TypeScript testee's `conn.pipe` accepts a `limit`,
+  and the Go testee reads its side's close from the transport alone.
+
 ## 0.4.1 (27 September 2026)
 
 - A peer's own deadline for a call is its caller's (bitruntime#23). In Go an
