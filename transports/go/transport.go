@@ -124,17 +124,24 @@ var ErrUnsendableCode = errors.New("bitruntime: close code may only be observed"
 
 // CloseError is what Receive returns once the remote side closed: the code
 // and the reason it gave, which a protocol above may act on. It is also a
-// closed carrier, so errors.Is(err, ErrClosed) holds for it.
+// closed carrier, so errors.Is(err, ErrClosed) holds for it. Local marks a
+// close this side chose, as when a receiver refuses a frame over its limit
+// with 1009, so that it can tell the code it ended the connection with.
 type CloseError struct {
 	Code   Code
 	Reason string
+	Local  bool
 }
 
 func (e *CloseError) Error() string {
-	if e.Reason == "" {
-		return fmt.Sprintf("connection closed by the remote side (%d)", int(e.Code))
+	side := "the remote side"
+	if e.Local {
+		side = "this side"
 	}
-	return fmt.Sprintf("connection closed by the remote side (%d): %s", int(e.Code), e.Reason)
+	if e.Reason == "" {
+		return fmt.Sprintf("connection closed by %s (%d)", side, int(e.Code))
+	}
+	return fmt.Sprintf("connection closed by %s (%d): %s", side, int(e.Code), e.Reason)
 }
 
 // Is classifies a remote close as a closed carrier.

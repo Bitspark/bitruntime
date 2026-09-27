@@ -223,8 +223,17 @@ const IN_FLIGHT = 8;
  * listener, so an end nobody listens to holds what was sent rather than losing
  * it, and is given it in order once someone listens. It carries the profile in
  * tests without a socket, as the Go pipe does.
+ *
+ * `limit`, in bytes (UTF-8 for text), is each end's receive limit; 0, the
+ * default, is none. A frame over it is refused before delivery and ends the
+ * pipe with 1009 on both ends, as a WebSocket does at its read limit and the
+ * Go pipe does at its own.
  */
-export function pipe(): [FrameConnection, FrameConnection] {
+export function pipe(limit = 0): [FrameConnection, FrameConnection] {
+  if (!Number.isSafeInteger(limit) || limit < 0) throw new RangeError('A pipe limit is a nonnegative safe integer.');
+  const encoder = new TextEncoder();
+  const size = (frame: Frame): number =>
+    frame.kind === 'text' ? encoder.encode(frame.data).byteLength : frame.data.byteLength;
   class End implements FrameConnection {
     state: ConnectionState = 'open';
     partner!: End;
@@ -279,6 +288,11 @@ export function pipe(): [FrameConnection, FrameConnection] {
         if (this.state !== 'open' || partner.state !== 'open' || partner.listeners.size === 0) return;
         const frame = this.inFlight.shift()!;
         if (this.held.length > 0) this.inFlight.push(this.held.shift()!);
+        if (limit > 0 && size(frame) > limit) {
+          // The receiving end refuses it, and the close reaches both ends.
+          partner.close(CODE_TOO_LARGE, 'frame exceeds the receive limit');
+          return;
+        }
         for (const handlers of [...partner.listeners]) handlers.frame?.(frame);
       }
     }
