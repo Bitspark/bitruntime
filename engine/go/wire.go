@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"sync"
 
@@ -262,6 +263,17 @@ func (w *rootWire) run() {
 				// Retire before delivering the response: its callback can admit
 				// another request, but a queued cancellation still owns budget.
 				w.complete(key, state)
+				// The peer's deadline is its caller's (bitwire/1): an
+				// application's own call fails locally with the deadline that
+				// passed, as its own deadline would fail it, and a cancel has
+				// gone to the remote. A return that may cross a wire is answered
+				// cancelled, since a request_timeout is never a frame.
+				if errors.Is(err, context.DeadlineExceeded) {
+					if reply, ok := request.Own(delivered.message); ok {
+						_ = reply.Expire(fmt.Errorf("bitruntime: the call's deadline passed; its outcome may be unknown: %w", context.DeadlineExceeded))
+						return
+					}
+				}
 				core.Respond(delivered.message, result, core.WithoutUnpublishedProof(err))
 			}()
 		case wire.ProfileEvent:
