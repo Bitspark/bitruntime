@@ -99,5 +99,18 @@ test("a handler's context does not reach the carrier behind its dispatcher", asy
   a.close();
 });
 
+test('a peer that finds a frame over its own limit ends the connection with 1009', async () => {
+  // The pipe enforces no limit, so the peer is the receiver that refuses the
+  // frame. bitwire/1 binds 1009 for it (SCOPE, Limits); v0.6.0's peer sent 4011.
+  const [raw, far] = pipe();
+  const server = new Peer({ role: 'server', maxFrameBytes: 64 });
+  await server.attach(far);
+  const closed = new Promise<[number, string]>((resolve) => raw.listen({ close: (code, reason) => resolve([code, reason]) }));
+  raw.send({ kind: 'text', data: JSON.stringify({ version: 1, kind: 'event', event: '4:note', data: 'x'.repeat(200) }) });
+  const [code] = await closed;
+  assert.equal(code, 1009);
+  assert.equal(server.status, 'disconnected');
+});
+
 // Keep the Endpoint import meaningful to the type checker.
 export type { Endpoint };

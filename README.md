@@ -96,6 +96,7 @@ Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
 | `engine/go` | The `bitwire/1` `Peer` over any transport |
 | `engine/websocket/go` | `Accept`, `NewHandler` and `Dial` over WebSockets |
 | `dispatch/go` | `NewDispatcher` and its atomically replaced `RouteSet`, `Serve`, `Call`, `Emit`, `Handle`, `Register` |
+| `cmd/bitwire-testee/go` | The Go driver-1 testee for bitwire's `bitwire/1` conformance contract (a command, not a library) |
 
 A program links only the packages it imports; `coder/websocket` and `net/http`
 enter only through the WebSocket packages. TypeScript uses one package,
@@ -106,12 +107,18 @@ structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public
 publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
 registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 
+Each release also carries bitruntime's driver-1 testees for bitwire's
+`bitwire/1` conformance contract: the Go command `cmd/bitwire-testee/go` and
+the TypeScript asset `bitspark-bitruntime-testee-<version>.tgz`. They are test
+tooling that bitwire's runner drives, never a runtime dependency. Read
+[`cmd/bitwire-testee`](cmd/bitwire-testee/README.md).
+
 To install a release, require the Go module at its tag and the TypeScript
 package from its release asset:
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.3.0
-npm install https://github.com/Bitspark/bitruntime/releases/download/v0.3.0/bitspark-bitruntime-0.3.0.tgz
+go get github.com/Bitspark/bitruntime@v0.4.0
+npm install https://github.com/Bitspark/bitruntime/releases/download/v0.4.0/bitspark-bitruntime-0.4.0.tgz
 ```
 
 npm 12 refuses dependencies that are tarball URLs unless the project allows

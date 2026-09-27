@@ -142,9 +142,10 @@ func TestPeerRefusesAFrameOverItsLimit(t *testing.T) {
 	if err := peer.Err(); !errors.Is(err, transports.ErrClosed) || !strings.HasSuffix(err.Error(), "duplex frame exceeds size limit") {
 		t.Fatalf("the peer ended with %v", err)
 	}
-	// And the far side is told, with the protocol's code and the refusal.
+	// And the far side is told with 1009, which bitwire/1 binds for a frame
+	// over the receiver's limit (SCOPE, Limits). v0.6.0's peer sent 4011.
 	var closed *transports.CloseError
-	if _, err := far.Receive(ctx); !errors.As(err, &closed) || closed.Code != transports.CodeProtocol || closed.Reason != "duplex frame exceeds size limit" {
+	if _, err := far.Receive(ctx); !errors.As(err, &closed) || closed.Code != transports.CodeTooLarge || closed.Reason != "frame exceeds the receive limit" {
 		t.Fatalf("the far side read %v", err)
 	}
 }

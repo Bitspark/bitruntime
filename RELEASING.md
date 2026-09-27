@@ -15,6 +15,13 @@ Coordinates:
   exports the subpaths `/core`, `/transports`, `/engine` and `/dispatch`.
   v0.1.0 shipped the structural core alone as `@bitspark/bitruntime-core` from
   `core/ts`.
+- The driver-1 testees of bitwire's `bitwire/1` conformance contract
+  (`cmd/bitwire-testee`). The Go testee is the module's package
+  `cmd/bitwire-testee/go`, released by the same tag. The TypeScript testee is
+  its own release asset, `bitspark-bitruntime-testee-<version>.tgz`, packed by
+  `scripts/testee-package.mjs`; it depends on the package by this release's
+  asset URL, so no testee code ships in the package. `SHA256SUMS` covers both
+  tarballs, and bitwire pins them as it pins the module and the package.
 - A later component records its module boundary here before it is released.
 
 Both implementations use the public bitwire 0.3.0 contract. No dependency on a
@@ -24,9 +31,12 @@ nested under `conformance/interop` and their npm package is never packed.
 
 Before tagging, land a reviewed green PR on main. The CI workflow checks Go
 formatting/vet/race tests, TypeScript checking/build/tests, the independent
-bitwire structural oracle, a fresh installed TypeScript tarball consumer, and
-interoperability with nightseam v0.6.0 peers in every Go/TypeScript pairing,
-byte for byte.
+bitwire structural oracle, a fresh installed TypeScript tarball consumer, the
+two testees across languages from source and from their packed tarballs
+(`scripts/testee-smoke.mjs`), and interoperability with nightseam v0.6.0 peers
+in every Go/TypeScript pairing, byte for byte. Run bitwire's conformance runner
+against the testees in every Go/TypeScript pairing before a release that
+changes the engine or the testees.
 Confirm the actual bitwire dependency release is publicly installable and run
 the same checks locally where supported. Validate a fresh Go consumer against
 the pushed commit, then against the final tag.

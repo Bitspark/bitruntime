@@ -14,6 +14,7 @@ import { requestCompletion } from '../../../core/ts/src/internal/request.ts';
 import { traceOf, traced } from '../../../core/ts/src/internal/trace.ts';
 import { scalarJSON } from '../../../core/ts/src/internal/unicode.ts';
 import {
+  CODE_TOO_LARGE,
   sendable,
   webSocketConnection,
   type Frame,
@@ -565,7 +566,9 @@ export class Peer {
     const data = incoming.data;
     const bytes = new TextEncoder().encode(data).byteLength;
     if (bytes > this.limits.maxFrameBytes) {
-      this.fail(new PublicError('frame_too_large', 'Incoming frame exceeds the size limit.'));
+      // bitwire/1 binds 1009 for a frame over the receiver's limit, whether its
+      // transport or this peer finds it (v0.6.0's peer closed 4011 here).
+      this.fail(new PublicError('frame_too_large', 'Incoming frame exceeds the size limit.'), true, CODE_TOO_LARGE, 'frame exceeds the receive limit');
       return;
     }
     let frame: Envelope;

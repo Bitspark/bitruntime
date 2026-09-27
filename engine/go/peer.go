@@ -500,7 +500,9 @@ func (p *Peer) readLoop() {
 			return
 		}
 		if int64(len(received.Data)) > p.options.MaxFrameBytes {
-			p.refuse(errors.New("duplex frame exceeds size limit"))
+			// bitwire/1 binds 1009 for a frame over the receiver's limit, whether
+			// its transport or this peer finds it (v0.6.0's peer closed 4011 here).
+			p.end(errors.New("duplex frame exceeds size limit"), transports.CodeTooLarge, "frame exceeds the receive limit")
 			return
 		}
 		f, err := profile.Decode(received.Data)

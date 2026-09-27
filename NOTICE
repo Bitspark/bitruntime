@@ -49,6 +49,11 @@ as their own commit, and every modification is a later commit.
   runtime/ts/src/dispatcher.ts      dispatch/ts/src/dispatcher.ts
   runtime/ts/src/peer.ts            engine/ts/src/peer.ts
   runtime/go and runtime/ts tests   the corresponding *_test.go and ts/test
+  conformance/go/testee/main.go,
+    conn.go, peer.go, ops.go,
+    observe.go                      cmd/bitwire-testee/go
+  conformance/ts/src/testee.ts,
+    seam.ts, peer.ts                cmd/bitwire-testee/ts/src
 
 The files under vectors/bitwire-1/ are byte-identical copies of nightseam
 v0.6.0's conformance/tables/frames.json, serials.json and unicode.json.

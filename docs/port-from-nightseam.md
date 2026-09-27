@@ -107,7 +107,10 @@ None changes a `bitwire/1` frame.
   `ErrUnsendableCode`; a peer asked to close with one aborts instead.
 - **Receive limits.** A frame over the pipe's limit ends it with 1009 on both
   sides, as a WebSocket does; a WebSocket past its read limit is ended promptly
-  instead of being left half closed.
+  instead of being left half closed. A peer handed a frame over its own
+  `MaxFrameBytes`, by a connection whose limit is laxer, also ends with 1009,
+  which bitwire/1 binds for a frame over the receiver's limit (SCOPE, Limits);
+  v0.6.0's peers closed 4011 there (found by the testees, bitruntime#20).
 - **Copy, then validate (research 0001, row 28).** The pair, the root and the
   call helper's reply copy a message's payloads before validating them, so a
   caller that mutates its message during `Send` cannot admit bytes that were
@@ -159,6 +162,38 @@ None changes a `bitwire/1` frame.
 - A local pair and a peer's root still end their carrier when a bounded queue
   overflows. The send whose overflow ended it reports `core.ErrBackpressure`
   with the closed classification; later sends report the carrier closed.
+
+## The driver-1 testees
+
+bitruntime v0.4.0 adds the driver-1 testees of bitwire's `bitwire/1`
+conformance contract (bitruntime#20), ported from the same commit. The verbatim
+import is again its own commit.
+
+| nightseam v0.6.0 | bitruntime |
+| --- | --- |
+| `conformance/go/testee/main.go`, `conn.go`, `peer.go`, `ops.go` | `cmd/bitwire-testee/go` |
+| `conformance/go/testee/observe.go`, its close latch | `cmd/bitwire-testee/go/closed.go` |
+| `conformance/ts/src/testee.ts` | `cmd/bitwire-testee/ts/src/testee.ts`, `driver.ts` |
+| `conformance/ts/src/seam.ts`, `peer.ts` | `cmd/bitwire-testee/ts/src/seam.ts`, `peer.ts` |
+
+They use only bitruntime's public API; the TypeScript testee imports the
+package by its own name. Where they differ from v0.6.0's testees:
+- **Names.** A driver `method` or event `name` is a one-segment path, so
+  `echo` travels as `4:echo`. bitruntime serves canonical path names only (the
+  raw method-name API above is removed), where v0.6.0's testees registered raw
+  names.
+- **Deadlines.** `request_timeout_ms` is each call's own deadline, which the
+  contract defines it as.
+- **Unsupported.** The testees answer `unsupported` for tunnels (not yet
+  implemented), for the excluded identity exchange, recorded-wire witness,
+  `live.*` and `through`, and for the observer, which bitruntime does not have.
+  They claim the `seam` and `peer` layers only.
+- **Contract over code.** Where the edition-1 contract and v0.6.0's testees
+  differ (its §10), the testees follow the contract; for example, a handle of
+  the wrong kind is `invalid`.
+
+Not ported: `live.go`, `recorded_wire.go`, `tunnel.go` and their TypeScript
+counterparts, and `bitwire.ts`, a separate composition program.
 
 ## Not ported in this milestone
 
