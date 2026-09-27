@@ -2,7 +2,7 @@
 
 **ID:** 0001
 **Date:** 28 September 2026
-**Status:** advised
+**Status:** evaluated
 **Run-ID:** run_68a80ec1-7907-4c5f-b28c-d1c351b77066 (attempt 2; attempt 1, run_1e55330d, failed at the service with nothing sent)
 **Reviewed:** https://github.com/Bitspark/bitruntime/issues/29#issuecomment-5860240132
 **Owner:** bitruntime's maintainers (prepared by the bitruntime coding-agent session)
@@ -770,3 +770,78 @@ What a user of the TypeScript peer can observe:
    - the owner's scenarios still to come.
 
    What risks, design traps or better framings do you see that our questions miss, and what would you deliberately leave out of this first step?
+
+## Applied
+
+**Evaluated against:** `0001-carrier-contract-edition-1.submitted.md` (sha256 `767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba`), attempt 2, run `run_68a80ec1-7907-4c5f-b28c-d1c351b77066`, advice sha256 `9498c9e4…` (verified with `consult verify --output`, exit 0). The code is bitruntime `main` at `f0327a9`. The living document drifted only in its Status and Run-ID lines. The code drifted by one commit relevant here, #33 (row 29).
+
+**Graded:** awaiting grading by the maintainer. This repository has no architecture seat, so the maintainer, as the decision recipient, grades.
+
+**Library claims in the advice, checked against the pinned sources:**
+- coder/websocket v1.8.15:
+  - `Close` maps an `errors.Is(err, net.ErrClosed)` result to nil (`close.go`), so a nil `Close` is not proof of a handshake;
+  - `parseClosePayload` checks only the code, not the reason's UTF-8;
+  - dial takes its connection as an `io.ReadWriteCloser` from the response body (`dial.go:170`), and accept from `Hijack()` (`accept.go:159`).
+- `ws` 8.21.3 builds `wasClean` as `_closeFrameReceived && _closeFrameSent` (`lib/event-target.js:216`), and has a `skipUTF8Validation` option (`lib/websocket.js`).
+
+**Our code:** these premises were verified in the source.
+- The Go peer routes every `Receive` error, a remote close included, to `fail`, which aborts.
+- The Go `end()` does blocking close I/O inside `sync.Once`.
+- `refuse` sends `err.Error()` as the close reason.
+- `core.Ended` returns a cause that already matches `ErrClosed` unchanged.
+- TypeScript's `ended()` passes a `disconnected` cause through, and a received `disconnected` becomes the same class.
+
+| # | Recommendation | Verdict | Action | Owner | Link | Validation |
+|---|---|---|---|---|---|---|
+| 1 | Describe the browser combination as a compatibility implementation with an explicit deviation, not as "`bitwire/1` only" | HOLDS | Changes our lean: no unqualified `bitwire/1` claim for it; docs and release notes name the deviation | | | |
+| 2 | Two admission policies: required conformance rejects a combination lacking a needed capability; browser compatibility is an explicit opt-in. Assess at the peer. `connect()` rejects before creating the socket; a caller-supplied connection is not closed by a failed assessment | HOLDS | Peer option for the policy; assessment at `connect`/`attach` | | | |
+| 3 | A local `ClaimAssessment` (revision, requested edition, accepted claims, gaps with deviation ids), never on the wire | NEEDS ADAPTATION | A read-only accessor on `Peer` in both languages, not a separate object hierarchy; kept minimal | | | |
+| 4 | In compatibility mode, contain the failure: stop work, fail calls with a local closed error keeping the cause, record the required but unperformed action (close 1009, or abort). No substitute code, and no close queued behind failed output | HOLDS | The engine's ending path for adapters that lack a capability | | | |
+| 5 | A rejected close creates no local-close record. Keep the adapter's observer alive. Never manufacture `Closed(1006)`; defer a root's `Closed` until its R17 projection is known, which may be never in browser mode, and document that | HOLDS | Replaces today's constant `Closed(1001, "peer ended")` | | | |
+| 6 | Check the frame limit in the adapter, before delivery across the seam. This improves the seam but does not solve 1009 | HOLDS | Browser adapter checks size on message receipt | | | |
+| 7 | Propose to bitwire: a browser-API combination that cannot perform the receive-limit closure makes no unqualified `bitwire/1` claim; an alternative needs an owner-approved scope. Ask bitwire to settle the delivery boundary and the name | HOLDS | bitwire issue (with rows 17, 22, 34 and 45) | | | |
+| 8 | A required, immutable, per-connection `Capabilities {cannotSend, abort, role}` on both seams | HOLDS | Confirms our lean (a) with per-connection values | | | |
+| 9 | An `Ending` handle (`snapshot`, `done`), exposed by `Conn.Ending()` and TypeScript `ending`. TypeScript `close()` and `abort()` return it synchronously (never `async`), and a repeated close returns the same handle | HOLDS | Seam change in the breaking release (row 42) | | | |
+| 10 | The browser `abort()` throws `UnsupportedCapabilityError` without changing state | HOLDS | Settles our TypeScript-abort lean, option (c) | | | |
+| 11 | Trusted constructors over one WebSocket implementation: `browserWebSocketConnection` and `nodeWsConnection` (which receives `terminate` and the role). Never sniff properties | HOLDS | New TypeScript constructors; the engine's `connect()` uses the browser one | | | |
+| 12 | Make role permission (R7) explicit, e.g. 1010 is client-only (RFC 6455) | HOLDS | Part of capability and validation | | | |
+| 13 | Errors: `CloseArgumentError` and `UnsupportedCapabilityError`, which do not match `ErrClosed`, and a `ClosedError {Termination, Cause}` that matches `ErrClosed` and unwraps its cause. Put them in a small dependency-neutral module | NEEDS ADAPTATION | In Go they live in `transports/go`, which is already the dependency-neutral base the other packages import; no new module. Their `Rule` field cites bitwire's rule text, not our local R-ids (row 35) | | | |
+| 14 | A TypeScript `ClosedError` class distinct from `PublicError`. A received `disconnected` stays a `PublicError`; public serialization projects a `ClosedError` to `disconnected` | HOLDS | Fixes the R15 violation | | | |
+| 15 | A root-specific closed error that keeps the connection's error. Drop `core.Ended`'s pass-through across resource boundaries; use `errors.Join(connectionError, trigger)` | HOLDS | Changes `core.Ended` and the root | | | |
+| 16 | A `Fact<T>` knowledge model: unknown, or known with evidence (direct, library or derived). `CloseFrame.code` is null for an empty close, which projects 1005, while an absent close projects 1006. Snapshots are immutable and gain evidence until final | HOLDS | The record type in both languages | | | |
+| 17 | Ask bitwire to agree the evidence model: which members may be unknown | HOLDS | bitwire issue (row 7) | | | |
+| 18 | Keep `Endpoint`/`Receiver`. Ending and owner abort go through the peer or companion helpers. Go `Endpoint.Close` returns validation errors; TypeScript `close` stays `void` and validates synchronously. Every endpoint validates before any lifecycle change | HOLDS | Reasons are done at the TypeScript root (#33); codes are not yet, since the root still substitutes or aborts | | | |
+| 19 | Keep three dimensions apart: application usability, transport lifecycle, termination evidence | HOLDS | The engine's ending controller | | | |
+| 20 | An explicit `EndAction {close, abort, observe}` instead of `codeAborted = 0`; a remote close enters `observe` | HOLDS | Go reader loop and `end()` | | | |
+| 21 | Never hold a `sync.Once` or mutex across blocking close I/O, so abort stays reachable during a close. TypeScript commits state before library calls that may call back | HOLDS | The Go `end()` restructure | | | |
+| 22 | Order: argument, then capability and role, then join-or-start. Validate repeated requests too; a rejected repeat never replaces the close or aborts. Confirm with bitwire whether an unsupported repeat is rejected or joins (recommend: rejected) | HOLDS | Implement rejection; bitwire question (row 7) | | | |
+| 23 | Go: the first accepted close owns the deadline, and later waiters are bounded by their own context. TypeScript: a configured close deadline whose expiry triggers a real abort where one exists | HOLDS | Adapter lifecycle | | | |
+| 24 | Stop work promptly, publish the final record before `Closed`, and never make transport completion wait for application callbacks | HOLDS | The ending controller | | | |
+| 25 | R19: per-attachment finality, checked at execution time with a generation | NEEDS ADAPTATION | Delivery already looks up the current receiver at delivery time (Go `attached`, TypeScript `generation`). Extend and test that at the ending boundary rather than rebuild it | | | |
+| 26 | coder/websocket: bitruntime owns dial and accept construction and captures a hard-close there (the dial's response-body closer, the accept's hijacked `net.Conn`). An external connection must supply one or declare no abort. Do not rely on cancelling a pending read | HOLDS | New Go constructors; `New(conn, limit)` remains as a wrapper that declares no interrupting abort | | | |
+| 27 | coder/websocket's public `Close` returning nil is not proof of a handshake; keep real peer-close evidence | HOLDS | Corrects our document's claim | | | |
+| 28 | For the library's own 1009, record the library's reason separately from the engine's cause. The library discards the write result, so it is not proof of transmission | HOLDS | Record, with evidence "library" | | | |
+| 29 | `ws`: validate before `ws.close`; expose `terminate` through the trusted constructor; keep `wasClean`; never equate a returned `close()` with a completed write | STALE (validation) / HOLDS (the rest) | Validation was delivered in #33 (`f0327a9`) after submission. `terminate` is row 11. `wasClean` is kept in the adapter | | | |
+| 30 | Browser events: keep `code`, `reason` and `wasClean` | HOLDS | Adapter | | | |
+| 31 | An abort preserves history; remove API promises that an abort makes the far side observe 1006 | HOLDS | Go `Conn.Abort`'s doc comment says exactly that today | | | |
+| 32 | Write progress a library hides is unknown | HOLDS | Record | | | |
+| 33 | A borrowing dispatcher never ends a shared carrier over a handler failure. A request's failure fails the request; an event's is a diagnostic or ends only an owned attachment. No automatic 1002. Ownership is permission, not a mandate. Keep carrier-wide failures such as a full root queue | HOLDS | Confirms our least-sure lean; changes both dispatchers | | | |
+| 34 | Local pairs validate public closes under R8. Add an owner-side logical abort through a companion API, and propose a logical-abort projection to bitwire | HOLDS | Pair change; bitwire issue (row 7) | | | |
+| 35 | An interim scenario catalog pinned to the contract's hash. R-ids are traceability labels, never public error identifiers | HOLDS | New test catalog; affects row 13 | | | |
+| 36 | The coverage matrix (R1–R9, R10–R11, R12–R16, R17–R18, R19, R20–R23) | HOLDS | Scenario catalog | | | |
+| 37 | R22's test pins bitruntime's chosen abort policy, not a universal rule | HOLDS | Test wording | | | |
+| 38 | Three evidence levels: portable tests on pipes and fake drivers; adapter tests with explicit barriers (no sleeps) and injected partial writes at a lower I/O boundary; platform tests on real browsers (Playwright), Node's global `WebSocket` and `ws`. Record versions | HOLDS | Adds Playwright to bitruntime's CI (bitsystem3 already runs it) | | | |
+| 39 | Trace events that separate a request accepted, write progress, a peer close, an abort, the transport ending, the record finalized and an attachment closed. The testee's latch records intent, not emission | HOLDS | Testees and tests | | | |
+| 40 | Mutation checks: reintroduce substitution, late validation, lost cause, early detachment, blanket 1006 | HOLDS | Systematic counterfactuals in CI | | | |
+| 41 | When bitwire publishes its scenarios, map each interim one to theirs, keep library regressions, and list remaining deviations | DEFERRED | Trigger: `git -C bitwire log origin/main -- conformance` shows published API-boundary scenarios for D4 | | | |
+| 42 | One deliberate breaking minor release, in three phases: primitives and fixtures; seams and adapters; engines, roots, pairs, dispatchers, helpers and testees, then claims | HOLDS | v0.5.0 | | | |
+| 43 | Claim edition 1 only for combinations that meet both behaviour and evidence | HOLDS | Release notes and README | | | |
+| 44 | bitsystem3's migration: choose the factory, opt its browser client into compatibility mode, update closed checks, replace code latches | HOLDS | A bitsystem3 PR after v0.5.0 | | | |
+| 45 | Ask bitwire the precedence when a failed write coincides with a required refusal (proposed: never reuse a failed writer) | HOLDS | bitwire question (row 7) | | | |
+| 46 | Validate received-close evidence: coder/websocket does not check a received reason's UTF-8. Probe a malformed reason | HOLDS | Probe, then decide whether an adapter hook is needed | | | |
+| 47 | Capabilities depend on ownership and configuration (`ws`'s `skipUTF8Validation`); a claiming constructor must control them | HOLDS | Trusted constructors own the socket's options | | | |
+| 48 | Termination is not publication evidence: no retry safety, no "unpublished" conclusions (D1) | HOLDS | Scope guard | | | |
+| 49 | Generated close reasons are bounded constants, with detail in the cause | HOLDS | Go `refuse` stops sending `err.Error()`; `closeReason`'s truncation goes | | | |
+| 50 | Take the semantic milestones to bitwire now | HOLDS | Same issue as row 7 | | | |
+| 51 | Leave out D1–D3, stream framing, tunnels, a new operational code and a browser protocol redesign; report drain as unknown | HOLDS | Scope of v0.5.0 | | | |
+| 52 | The central invariant: once the engine cannot continue, application work stops exactly once, and afterwards the record gains only evidence its owning layer can support | HOLDS | The design principle the tests check | | | |
