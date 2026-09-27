@@ -1,0 +1,4 @@
+# Verbatim records: the exact bytes a consultation expert read, and the
+# expert's reply. They stay as they were (naming rule, "Quotations stay verbatim").
+research-docs/*.submitted.md
+research-docs/*.advice.md

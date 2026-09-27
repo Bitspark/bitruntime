@@ -44,7 +44,7 @@ Our current lean on (1): the browser combination does not claim edition 1, and i
 - A **call** is a request whose response settles it. The **call helpers** are Go's `dispatch.Call` and TypeScript's `call()`. A **dispatcher** is a receiver that routes messages to handlers by path; its routing table is its **registry**.
 - An **error code** is a string in a public error object, such as `disconnected`, `busy` or `invalid_message`. bitwire calls this object `ProfileError`, and bitruntime implements it as `PublicError` in both languages. A **close code** is a number from the WebSocket registry, sent in a close. The two namespaces are unrelated.
 - **Local** means in-process, never sent. In "local close" and Go's `CloseError.Local`, it means "chosen by this side".
-- Bitruntime's own **conformance testee** is a small program that bitwire's test runner drives in order to check bitruntime from outside. bitwire's **drivers** are its test-only harnesses per language.
+- bitruntime's own **conformance testee** is a small program that bitwire's test runner drives in order to check bitruntime from outside. bitwire's **drivers** are its test-only harnesses per language.
 
 **Go idioms used below:**
 - `errors.Is(err, target)` tests whether an error, or anything it wraps, is `target`. `errors.As(err, &x)` extracts a wrapped error of `x`'s type.
