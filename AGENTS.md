@@ -29,6 +29,15 @@ before changing this tree.
 - Do not add private checkout dependencies, local orchestration state or
   credentials.
 
+## Naming
+
+Write every Bitspark project exactly as its repository is named, in prose,
+headings, comments and messages alike: `bitwire`, `nightseam`, `bitruntime`,
+`bitsystem3` (the org's
+[naming rule](https://github.com/Bitspark/.github/blob/master/NAMING.md)). CI
+runs `node scripts/naming.mjs`; refresh its name list with
+`node scripts/naming.mjs --update`.
+
 ## Repository layout
 
 Use component-first source paths with two-letter language directories:
