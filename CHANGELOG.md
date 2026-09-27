@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 (27 September 2026)
+
+- Ship driver-1 testees for bitwire's `bitwire/1` conformance contract
+  (bitruntime#20), ported from nightseam v0.6.0 (`5cc9723`) onto bitruntime's
+  public API: the Go command `cmd/bitwire-testee/go` and the TypeScript release
+  asset `bitspark-bitruntime-testee-<version>.tgz`. They claim the core layers,
+  `seam` and `peer`.
+- A peer handed a frame over its own frame limit ends the connection with 1009,
+  in Go and TypeScript, which bitwire/1 binds for a frame over the receiver's
+  limit. v0.6.0, and bitruntime until now, closed 4011 there.
+
 ## 0.3.0 (27 September 2026)
 
 - Carry a `WireTree` across a carrier (bitruntime#15): `Bind`/`bind` sends at
