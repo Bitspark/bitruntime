@@ -112,5 +112,22 @@ test('a peer that finds a frame over its own limit ends the connection with 1009
   assert.equal(server.status, 'disconnected');
 });
 
+test('a root endpoint refuses a close reason its connection cannot send, before the peer ends (bitruntime#31)', async () => {
+  const [a, b] = pipe();
+  const client = new Peer();
+  const server = new Peer({ role: 'server' });
+  handle(createDispatcher(server.wire()), ['ping'], () => 'pong');
+  await Promise.all([client.attach(a), server.attach(b)]);
+  try {
+    assert.throws(() => client.wire().close(4000, 'x'.repeat(124)), RangeError);
+    assert.throws(() => client.wire().close(4000, 'a\uD800b'), RangeError);
+    assert.equal(client.status, 'connected');
+    assert.equal(await call(client.wire(), ['ping']), 'pong');
+  } finally {
+    client.close();
+    server.close();
+  }
+});
+
 // Keep the Endpoint import meaningful to the type checker.
 export type { Endpoint };

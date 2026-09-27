@@ -41,7 +41,10 @@ export interface FrameConnection {
   readonly buffered: number;
   /** Throws when the connection is not open. */
   send(frame: Frame): void;
-  /** Throws a RangeError, and sends nothing, for a code that is not `sendable`. */
+  /**
+   * Throws a RangeError, and sends nothing, for a code that is not `sendable`
+   * or a reason that is not a `validCloseReason`.
+   */
   close(code?: number, reason?: string): void;
   /** Registers handlers; returns a function that detaches all of them. */
   listen(handlers: ConnectionHandlers): () => void;
@@ -101,6 +104,26 @@ export function sendable(code: number): boolean {
 /** Refuses a close whose code may only be observed; nothing is sent. */
 function refuseUnsendable(code: number): void {
   if (!sendable(code)) throw new RangeError(`bitruntime: close code ${code} may only be observed`);
+}
+
+// An unpaired surrogate: what no UTF-8 encoding of a string can represent.
+const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const encoder = new TextEncoder();
+
+/**
+ * Whether a close reason may be sent: valid UTF-8, which for a string means no
+ * unpaired surrogate, and at most 123 bytes, a WebSocket close frame's bound.
+ * A reason is never truncated or repaired: one that fails is refused, and
+ * nothing is sent (carrier contract, edition 1).
+ */
+export function validCloseReason(reason: string): boolean {
+  return !UNPAIRED_SURROGATE.test(reason) && encoder.encode(reason).byteLength <= 123;
+}
+
+/** Refuses a close whose reason cannot be sent as it is; nothing is sent. */
+function refuseInvalidReason(reason: string): void {
+  if (!validCloseReason(reason))
+    throw new RangeError('bitruntime: a close reason is valid UTF-8 of at most 123 bytes');
 }
 
 /**
@@ -187,6 +210,9 @@ export function webSocketConnection(socket: WebSocketLike): FrameConnection {
     },
     close(code = CODE_NORMAL, reason = '') {
       refuseUnsendable(code);
+      // Refused before the socket sees it: ws moves to CLOSING before it
+      // checks a reason, and would then send nothing (bitruntime#31).
+      refuseInvalidReason(reason);
       try {
         socket.close(code, reason);
       } catch {
@@ -253,6 +279,7 @@ export function pipe(limit = 0): [FrameConnection, FrameConnection] {
     }
     close(code = CODE_NORMAL, reason = ''): void {
       refuseUnsendable(code);
+      refuseInvalidReason(reason);
       if (this.state === 'closed') return;
       this.state = 'closed';
       // What neither end has been handed goes nowhere, so nothing is buffered

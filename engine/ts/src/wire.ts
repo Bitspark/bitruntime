@@ -13,6 +13,7 @@ import { ended, outgoingTrace, profileFrame, publicError } from '../../../core/t
 import { decodePath, encodePath } from '../../../core/ts/src/internal/path.ts';
 import { isApplicationReturn, request } from '../../../core/ts/src/internal/request.ts';
 import { traceMembers } from '../../../core/ts/src/internal/trace.ts';
+import { validCloseReason } from '../../../transports/ts/src/index.ts';
 import type { Peer } from './peer.ts';
 
 /**
@@ -301,7 +302,13 @@ export function rootWire(peer: Peer, options: RootOptions): Endpoint {
       attachment = registration;
       return registration.detach;
     },
-    close: (code = 1000, reason = '') => options.close(code, reason),
+    close: (code = 1000, reason = '') => {
+      // Refused before the peer ends: its connection would refuse the reason
+      // too, and leave the peer ended over a connection still open.
+      if (!validCloseReason(reason))
+        throw new RangeError('bitruntime: a close reason is valid UTF-8 of at most 123 bytes');
+      options.close(code, reason);
+    },
   };
   return endpoint;
 }
