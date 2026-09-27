@@ -26,6 +26,8 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Go formatting
         run: test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - name: Project names
+        run: node scripts/naming.mjs
       - run: go vet ./...
       - run: go test -race -count=1 ./...
       - run: npm ci --ignore-scripts
