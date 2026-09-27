@@ -1,0 +1,26 @@
+{
+  "doc": "research-docs/0001-carrier-contract-edition-1.md",
+  "attempts": [
+    {
+      "attempt": 1,
+      "idempotencyKey": "bitruntime-research-0001-671b07fc-d00f-4c0f-aa54-c822c58175a6",
+      "clientTag": "bitruntime",
+      "collection": "bitruntime-research",
+      "slug": "0001-carrier-contract-edition-1",
+      "submittedPath": "research-docs/0001-carrier-contract-edition-1.submitted.md",
+      "docSha256": "767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba",
+      "docBytes": 57241,
+      "codeRevision": "c2d336ec475ff100ef6de0a58d853017b3ed90cc",
+      "cliBuild": "nightfall 0.1.0 (082bf10706c5, bundle f6db2152cb63) built 2026-09-27T17:15:49.835Z",
+      "preparedAt": "2026-09-27T22:04:27Z",
+      "documentId": null,
+      "serverSha256": null,
+      "runId": null,
+      "submittedAt": null,
+      "state": null,
+      "failureCode": null,
+      "resultSha256": null,
+      "verify": null
+    }
+  ]
+}
