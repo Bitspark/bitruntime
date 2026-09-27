@@ -133,8 +133,12 @@ export class Controlled {
 
   /** The WebSocket the peer runs over tells the code the connection ended under. */
   watch(socket: WebSocket): void {
-    socket.on('error', () => {
-      /* Its close reports it. */
+    socket.on('error', (error: Error & { code?: string }) => {
+      // The socket's maxPayload is the peer's frame limit. A frame over it is
+      // refused with 1009, which this side ends the connection under; the
+      // socket's own close reports the remote's reply instead, or 1006 when
+      // none arrives. Any other error's close reports it.
+      if (error.code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH') this.closedWith(1009);
     });
     socket.on('close', (code: number) => this.closedWith(code));
   }
@@ -489,7 +493,10 @@ export function peerOps(t: Testee): Record<string, Op> {
       const connection = c.release();
       const attaching = p.peer.attach(connection);
       // After the peer's own reader, so that the peer is handed every frame.
-      p.watchConnection(connection);
+      // A WebSocket tells the code this side ended under, as for a dialled or
+      // accepted peer; a pipe has only its connection's close.
+      if (c.socket) p.watch(c.socket);
+      else p.watchConnection(connection);
       await attaching.catch((error: unknown) => {
         throw fail('failed', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       });
