@@ -30,9 +30,11 @@ type node[T any] struct {
 }
 
 // Compose constructs a full node. It copies the child collection and all keys,
-// preserves own and child capability identity, and rejects duplicate keys, nil
-// children, and cycles identifiable by Go node identity. Empty and arbitrary
-// binary keys are valid.
+// preserves own and child capability identity, and rejects a missing own value,
+// duplicate keys, nil children, and cycles identifiable by Go node identity.
+// Every node has an own value (bitwire decision 0012): a nil interface, pointer,
+// map, slice, channel or function own is refused as ErrInvalidTree. Empty and
+// arbitrary binary keys are valid.
 //
 // Independently implemented children must satisfy DeixisNode's finite, stable
 // topology contract. Compose validates their complete Children graph; continued
@@ -44,6 +46,9 @@ type node[T any] struct {
 // Construction and validation do not call Own, At, or any payload operation on
 // children. There is no transformation from an opaque AddressedWire to a tree.
 func Compose[T any](own T, children []wire.Child[T]) (wire.DeixisNode[T], error) {
+	if isNil(any(own)) {
+		return nil, fmt.Errorf("%w: missing own value", ErrInvalidTree)
+	}
 	copied, err := copyChildren(children)
 	if err != nil {
 		return nil, err

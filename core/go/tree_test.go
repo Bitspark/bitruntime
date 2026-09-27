@@ -211,13 +211,32 @@ func TestSendSelectsExactlyPreservesMessageAndRefusal(t *testing.T) {
 	if err := core.Send(tree, nil, message); err != nil || len(rootWire.messages) != 1 {
 		t.Fatal("empty path did not use root own wire")
 	}
+	// Compose refuses a missing own; a foreign node can still present one.
 	var typedNil *recorder
-	if err := core.Send(mustCompose[wire.Wire](t, typedNil), nil, message); !errors.Is(err, core.ErrInvalidWire) {
+	if _, err := core.Compose[wire.Wire](typedNil, nil); !errors.Is(err, core.ErrInvalidTree) {
+		t.Fatalf("composing a typed nil primitive = %v", err)
+	}
+	if err := core.Send(foreignLeaf{own: typedNil}, nil, message); !errors.Is(err, core.ErrInvalidWire) {
 		t.Fatalf("typed nil primitive = %v", err)
 	}
 	if err := core.Send(nil, nil, message); !errors.Is(err, core.ErrMissingPath) {
 		t.Fatalf("nil tree = %v", err)
 	}
+}
+
+// foreignLeaf is a DeixisNode Compose did not build.
+type foreignLeaf struct{ own wire.Wire }
+
+func (f foreignLeaf) Own() wire.Wire                    { return f.own }
+func (f foreignLeaf) Children() []wire.Child[wire.Wire] { return nil }
+func (f foreignLeaf) Decompose() (wire.Wire, []wire.Child[wire.Wire]) {
+	return f.own, nil
+}
+func (f foreignLeaf) At(path wire.TreePath) (wire.DeixisNode[wire.Wire], bool) {
+	if len(path) == 0 {
+		return f, true
+	}
+	return nil, false
 }
 
 func TestAddressedBridgeExactUTF8AndValidation(t *testing.T) {

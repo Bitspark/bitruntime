@@ -81,11 +81,14 @@ class Node<T> implements DeixisNode<T> {
 
 /**
  * Construct a complete immutable node, retaining own-value and child identity.
- * Keys and the child collection are copied. Duplicate keys and structural cycles
- * are rejected. Foreign nodes must themselves honor DeixisNode's finite, stable,
- * immutable topology contract; validation does not freeze another implementation.
+ * Keys and the child collection are copied. A missing own value (undefined or
+ * null; every node has one, bitwire decision 0012), duplicate keys and
+ * structural cycles are rejected. Foreign nodes must themselves honor
+ * DeixisNode's finite, stable, immutable topology contract; validation does not
+ * freeze another implementation.
  */
 export function compose<T>(own: T, children: Iterable<Child<T>> = []): DeixisNode<T> {
+  if (own === undefined || own === null) throw new TypeError('A node requires an own value');
   const retained = copyChildren(children);
   validateChildren(retained);
   return new Node(own, retained);

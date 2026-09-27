@@ -36,6 +36,28 @@ func (w *selectedWire) Send(path []string, message wire.Message) error {
 	return w.root.Send(w.path(path), message)
 }
 
+type boundWire struct {
+	access wire.AddressedWire
+	path   []string
+}
+
+// Bind returns addressless access that sends at one fixed addressed path:
+// Bind(access, path).Send(m) is access.Send(path, m), with the message and its
+// return capability unchanged and a refusal returned as access returns it. The
+// path is copied. The Wire grants only sending: no receive attachment, closure
+// or structure.
+//
+// A carrier path names a position, not a node: addressed access cannot reveal
+// that two far positions share one node. A tree whose own values live across a
+// carrier therefore binds each position it names.
+func Bind(access wire.AddressedWire, path []string) wire.Wire {
+	return &boundWire{access: access, path: slices.Clone(path)}
+}
+
+func (b *boundWire) Send(message wire.Message) error {
+	return b.access.Send(slices.Clone(b.path), message)
+}
+
 type mountedWire struct {
 	children map[string]wire.Endpoint
 	mu       sync.Mutex
