@@ -110,7 +110,8 @@ registry publication is not configured. Read [RELEASING.md](RELEASING.md).
 Each release also carries bitruntime's driver-1 testees for bitwire's
 `bitwire/1` conformance contract: the Go command `cmd/bitwire-testee/go` and
 the TypeScript asset `bitspark-bitruntime-testee-<version>.tgz`. They are test
-tooling that bitwire's runner drives, never a runtime dependency. Read
+tooling that bitwire's runner drives, never a runtime dependency. Under npm 12,
+install the testee together with the runtime's asset URL. Read
 [`cmd/bitwire-testee`](cmd/bitwire-testee/README.md).
 
 To install a release, require the Go module at its tag and the TypeScript
