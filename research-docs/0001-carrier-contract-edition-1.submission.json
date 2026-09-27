@@ -40,10 +40,10 @@
       "requestedAccount": "account-2",
       "runId": "run_68a80ec1-7907-4c5f-b28c-d1c351b77066",
       "submittedAt": "2026-09-27T22:10:40Z",
-      "state": "submitted",
+      "state": "completed",
       "failureCode": null,
-      "resultSha256": null,
-      "verify": null
+      "resultSha256": "9498c9e41e0c8185467daeccf70c04ad4544d66bc60d6f2491295d3942178c17",
+      "verify": "exit 0 with --output: all checks passed"
     }
   ]
 }
