@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- TypeScript refuses a close reason it cannot send as it is: not valid UTF-8
+  (an unpaired surrogate), or over 123 bytes. The adapter, the pipe and a
+  peer's root endpoint throw `RangeError` before anything changes, and
+  `validCloseReason` is exported. Before, a `ws` socket given such a reason was
+  left in CLOSING with nothing sent (bitruntime#31), and the browser API's
+  refusal was hidden by a close without a code.
+
 ## 0.4.2 (27 September 2026)
 
 - The TypeScript `pipe(limit)` takes a receive limit, as Go's `Pipe(limit)`
