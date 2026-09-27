@@ -19,6 +19,32 @@ interface Registration {
   receiver: Receiver;
 }
 
+/** One registration a RouteSet installs: exact unless `prefix`. */
+export interface Route {
+  readonly path: Path;
+  readonly prefix?: boolean;
+  readonly receiver: Receiver;
+}
+/**
+ * A group of routes its owner replaces as a whole. `set` swaps the group's
+ * routes in one step, so each delivery is routed by the group before the swap
+ * or by the group after it, never by a mixture and never by neither. A request
+ * already admitted keeps the registration that admitted it: its cancellation
+ * reaches that route's receiver, whatever has replaced it since. Replacing or
+ * removing a route does not call its `closed`; closing the dispatcher does.
+ */
+export interface RouteSet {
+  /**
+   * Replaces every route of the group, atomically. Refuses, changing nothing,
+   * an invalid path (InvalidPathError), a path given twice or registered
+   * outside the group (ReceiverExistsError), and a closed group or dispatcher.
+   */
+  set(routes: readonly Route[]): void;
+  /** Removes the group's routes. The group admits no further `set`. */
+  close(): void;
+}
+type Installed = readonly [Map<string, Registration>, string, Registration];
+
 /** One attachment's options. */
 export interface DispatcherOptions {
   /** Explicit closure authority over an endpoint owned by the caller. */
@@ -77,6 +103,45 @@ export class Dispatcher implements Registry {
     return () => {
       if (routes.get(name) === registration) routes.delete(name);
     };
+  }
+  /** An empty group of routes owned by its caller. */
+  routeSet(): RouteSet {
+    let installed: Installed[] = [];
+    let closed = false;
+    const remove = (): void => {
+      for (const [routes, name, registration] of installed) {
+        if (routes.get(name) === registration) routes.delete(name);
+      }
+      installed = [];
+    };
+    return Object.freeze({
+      set: (routes: readonly Route[]): void => {
+        const next: Installed[] = [];
+        const names = new Set<string>();
+        for (const route of routes) {
+          const table = route.prefix ? this.prefixes : this.exact;
+          const name = encodePath(route.path);
+          const id = `${route.prefix ? 'prefix' : 'exact'} ${name}`;
+          if (names.has(id)) throw new ReceiverExistsError();
+          names.add(id);
+          next.push([table, name, { path: [...route.path], receiver: route.receiver }]);
+        }
+        if (this.ended || closed) throw disconnected();
+        for (const [table, name] of next) {
+          const existing = table.get(name);
+          if (existing && !installed.some(([owned, ownedName, registration]) => owned === table && ownedName === name && registration === existing))
+            throw new ReceiverExistsError();
+        }
+        remove();
+        for (const [table, name, registration] of next) table.set(name, registration);
+        installed = next;
+      },
+      close: (): void => {
+        if (closed) return;
+        closed = true;
+        remove();
+      },
+    });
   }
   private match(path: Path, name: string): Registration | undefined {
     const exact = this.exact.get(name);

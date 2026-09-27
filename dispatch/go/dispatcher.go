@@ -115,6 +115,86 @@ func (d *Dispatcher) register(path []string, receiver wire.Receiver, prefix bool
 	}, nil
 }
 
+// Route is one registration a RouteSet installs: exact unless Prefix.
+type Route struct {
+	Path     []string
+	Prefix   bool
+	Receiver wire.Receiver
+}
+
+// RouteSet is a group of routes its owner replaces as a whole. Set swaps the
+// group's routes under the dispatcher's lock, so each delivery is routed by
+// the group before the swap or by the group after it, never by a mixture and
+// never by neither. A request already admitted keeps the registration that
+// admitted it: its cancellation reaches that route's receiver, whatever has
+// replaced it since. Replacing or removing a route does not call its Closed;
+// closing the dispatcher does.
+type RouteSet struct {
+	owner  *Dispatcher
+	routes map[dispatchRoute]*dispatchRegistration // guarded by owner.mu
+	closed bool                                    // guarded by owner.mu
+}
+
+// RouteSet returns an empty group of routes owned by its caller.
+func (d *Dispatcher) RouteSet() *RouteSet { return &RouteSet{owner: d} }
+
+// Set replaces every route of the group with routes, atomically. It refuses,
+// changing nothing, an invalid path (core.ErrInvalidPath), a path given twice
+// or registered outside the group (core.ErrReceiverExists), and a closed
+// group or dispatcher (transports.ErrClosed).
+func (s *RouteSet) Set(routes []Route) error {
+	next := make(map[dispatchRoute]*dispatchRegistration, len(routes))
+	for _, route := range routes {
+		name, err := profile.EncodePath(route.Path)
+		if err != nil {
+			return core.ErrInvalidPath
+		}
+		key := dispatchRoute{name, route.Prefix}
+		if next[key] != nil {
+			return core.ErrReceiverExists
+		}
+		next[key] = &dispatchRegistration{path: slices.Clone(route.Path), receiver: route.Receiver}
+	}
+	d := s.owner
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.closed || s.closed {
+		return transports.ErrClosed
+	}
+	for key := range next {
+		if existing := d.routes[key]; existing != nil && s.routes[key] != existing {
+			return core.ErrReceiverExists
+		}
+	}
+	for key, registration := range s.routes {
+		if d.routes[key] == registration {
+			delete(d.routes, key)
+		}
+	}
+	for key, registration := range next {
+		d.routes[key] = registration
+	}
+	s.routes = next
+	return nil
+}
+
+// Close removes the group's routes. The group admits no further Set.
+func (s *RouteSet) Close() {
+	d := s.owner
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	for key, registration := range s.routes {
+		if d.routes[key] == registration {
+			delete(d.routes, key)
+		}
+	}
+	s.routes = nil
+}
+
 func (d *Dispatcher) match(path []string, name string) *dispatchRegistration {
 	if exact := d.routes[dispatchRoute{name, false}]; exact != nil {
 		return exact

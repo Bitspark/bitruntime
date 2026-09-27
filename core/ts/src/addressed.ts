@@ -1,4 +1,4 @@
-import type { AddressedWire, Endpoint, Path, Receiver } from '@bitspark/bitwire';
+import type { AddressedWire, Endpoint, Message, Path, Receiver, Wire } from '@bitspark/bitwire';
 import { MissingPathError, ReceiverExistsError } from './error.ts';
 import { ended } from './internal/frame.ts';
 import { encodePath } from './internal/path.ts';
@@ -15,6 +15,22 @@ export function at(root: AddressedWire, path: Path): AddressedWire {
   return {
     send: (suffix, message) => root.send([...prefix, ...suffix], message),
   };
+}
+
+/**
+ * Addressless access that sends at one fixed addressed path:
+ * bind(access, path).send(m) is access.send(path, m), with the message and its
+ * return capability unchanged and a refusal thrown as access throws it. The
+ * path is copied. The Wire grants only sending: no receive attachment, closure
+ * or structure.
+ *
+ * A carrier path names a position, not a node: addressed access cannot reveal
+ * that two far positions share one node. A tree whose own values live across a
+ * carrier therefore binds each position it names.
+ */
+export function bind(access: AddressedWire, path: Path): Wire {
+  const fixed = [...path];
+  return Object.freeze({ send: (message: Message) => access.send([...fixed], message) });
 }
 
 interface ChildAttachment {

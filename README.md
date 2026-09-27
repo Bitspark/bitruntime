@@ -74,18 +74,28 @@ tree from an opaque addressed endpoint, queue invocations, or own endpoint
 lifetime. Derived sending preserves the selected primitive's admission/refusal
 and message/return-capability identity.
 
+Two explicit bridges carry a tree across a carrier, which names positions, not
+nodes:
+
+- `Bind`/`bind` gives the near side an addressless `Wire` that sends at one
+  fixed addressed path; a near tree binds each far position it names.
+- `Serve`/`serve` gives the far side one exact dispatcher route per position
+  whose keys are UTF-8, bound to that position's own `Wire`. `Update` replaces
+  the served tree atomically, and a request admitted before a replacement keeps
+  the node that admitted it, its cancellation included.
+
 ## Packages
 
 Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
 
 | Package | Holds |
 | --- | --- |
-| `core/go` | Trees, `At`, `Mount`, `Forward`, `NewPair`, the invocation lifecycle, `Respond`, `PublicError` |
+| `core/go` | Trees, `At`, `Bind`, `Mount`, `Forward`, `NewPair`, the invocation lifecycle, `Respond`, `PublicError` |
 | `transports/go` | The seam, `Pipe`, close codes and `Sendable`, the closed classification `ErrClosed` |
 | `transports/websocket/go` | The WebSocket transport |
 | `engine/go` | The `bitwire/1` `Peer` over any transport |
 | `engine/websocket/go` | `Accept`, `NewHandler` and `Dial` over WebSockets |
-| `dispatch/go` | `NewDispatcher`, `Call`, `Emit`, `Handle`, `Register` |
+| `dispatch/go` | `NewDispatcher` and its atomically replaced `RouteSet`, `Serve`, `Call`, `Emit`, `Handle`, `Register` |
 
 A program links only the packages it imports; `coder/websocket` and `net/http`
 enter only through the WebSocket packages. TypeScript uses one package,
@@ -100,8 +110,8 @@ To install a release, require the Go module at its tag and the TypeScript
 package from its release asset:
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.2.0
-npm install https://github.com/Bitspark/bitruntime/releases/download/v0.2.0/bitspark-bitruntime-0.2.0.tgz
+go get github.com/Bitspark/bitruntime@v0.3.0
+npm install https://github.com/Bitspark/bitruntime/releases/download/v0.3.0/bitspark-bitruntime-0.3.0.tgz
 ```
 
 npm 12 refuses dependencies that are tarball URLs unless the project allows

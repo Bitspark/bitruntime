@@ -7,7 +7,7 @@
  */
 export { compose, select, send, asAddressed } from './tree.ts';
 export { MissingPathError, InvalidPathError, ReceiverExistsError, PublicError, UnpublishedError } from './error.ts';
-export { at, mount } from './addressed.ts';
+export { at, bind, mount } from './addressed.ts';
 export { forward } from './forward.ts';
 export { pair, type PairOptions } from './pair.ts';
 export { respond } from './respond.ts';

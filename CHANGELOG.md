@@ -1,7 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (27 September 2026)
 
+- Carry a `WireTree` across a carrier (bitruntime#15): `Bind`/`bind` sends at
+  one fixed addressed path, and `Serve`/`serve` routes each UTF-8 position of a
+  tree through its own exact dispatcher route, skipping binary-keyed subtrees
+  (`Unreachable`), answering a refused request and dropping a refused event.
+- Add `RouteSet` to the dispatcher (`Dispatcher.RouteSet`/`routeSet`): a group
+  of routes replaced as a whole, atomically, so a delivery racing a
+  replacement is never refused `method_not_found`, and an admitted request's
+  cancellation stays with the route that admitted it. `Served.Update` uses it.
+- `Compose`/`compose` refuse a missing own value (bitwire decision 0012: every
+  node has one). v0.2.0 accepted it, and sending there failed later.
 - Name npm 12's `allow-remote=root` in the install instructions: npm 12 refuses
   a tarball-URL dependency, the form a release is installed in, unless the
   consuming project allows it.
