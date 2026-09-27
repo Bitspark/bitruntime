@@ -1,0 +1,49 @@
+{
+  "doc": "research-docs/0001-carrier-contract-edition-1.md",
+  "attempts": [
+    {
+      "attempt": 1,
+      "idempotencyKey": "bitruntime-research-0001-671b07fc-d00f-4c0f-aa54-c822c58175a6",
+      "clientTag": "bitruntime",
+      "collection": "bitruntime-research",
+      "slug": "0001-carrier-contract-edition-1",
+      "submittedPath": "research-docs/0001-carrier-contract-edition-1.submitted.md",
+      "docSha256": "767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba",
+      "docBytes": 57241,
+      "codeRevision": "c2d336ec475ff100ef6de0a58d853017b3ed90cc",
+      "cliBuild": "nightfall 0.1.0 (082bf10706c5, bundle f6db2152cb63) built 2026-09-27T17:15:49.835Z",
+      "preparedAt": "2026-09-27T22:04:27Z",
+      "documentId": "doc_9a7e16b9-e38f-4af4-97e2-f0f0af78041b",
+      "serverSha256": "767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba",
+      "runId": "run_1e55330d-37fb-4413-b815-4526426dd224",
+      "submittedAt": "2026-09-27T22:04:59Z",
+      "state": "failed",
+      "failureCode": "invalid_transition",
+      "resultSha256": null,
+      "verify": null,
+      "error": "105_SELECT_MODEL: the provider account (account-1) could not load its model list; nothing was sent"
+    },
+    {
+      "attempt": 2,
+      "idempotencyKey": "bitruntime-research-0001-b15a11e5-66a8-4f4b-83b4-b5722164cc91",
+      "clientTag": "bitruntime",
+      "collection": "bitruntime-research",
+      "slug": "0001-carrier-contract-edition-1",
+      "submittedPath": "research-docs/0001-carrier-contract-edition-1.submitted.md",
+      "docSha256": "767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba",
+      "docBytes": 57241,
+      "codeRevision": "c2d336ec475ff100ef6de0a58d853017b3ed90cc",
+      "cliBuild": "nightfall 0.1.0 (082bf10706c5, bundle f6db2152cb63) built 2026-09-27T17:15:49.835Z",
+      "preparedAt": "2026-09-27T22:10:23Z",
+      "documentId": "doc_9a7e16b9-e38f-4af4-97e2-f0f0af78041b",
+      "serverSha256": "767d7eb8a6753e6d2c913668d3e69f24824da55a117950e10434984bbb6d63ba",
+      "requestedAccount": "account-2",
+      "runId": "run_68a80ec1-7907-4c5f-b28c-d1c351b77066",
+      "submittedAt": "2026-09-27T22:10:40Z",
+      "state": "completed",
+      "failureCode": null,
+      "resultSha256": "9498c9e41e0c8185467daeccf70c04ad4544d66bc60d6f2491295d3942178c17",
+      "verify": "exit 0 with --output: all checks passed"
+    }
+  ]
+}
