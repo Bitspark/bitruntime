@@ -11,7 +11,7 @@ import {
 } from '../../../core/ts/src/internal/context.ts';
 import { ended, outgoingTrace, profileFrame, publicError } from '../../../core/ts/src/internal/frame.ts';
 import { decodePath, encodePath } from '../../../core/ts/src/internal/path.ts';
-import { request } from '../../../core/ts/src/internal/request.ts';
+import { isApplicationReturn, request } from '../../../core/ts/src/internal/request.ts';
 import { traceMembers } from '../../../core/ts/src/internal/trace.ts';
 import type { Peer } from './peer.ts';
 
@@ -191,6 +191,11 @@ export function rootWire(peer: Peer, options: RootOptions): Endpoint {
         // another request, but a queued cancellation still owns budget.
         call!.completed = true;
         retire(call!);
+        // The peer's deadline is its caller's (bitwire/1): an application's
+        // own call gets request_timeout, and a return that may cross a wire is
+        // answered cancelled, since a request_timeout is never a frame.
+        if (error instanceof PublicError && error.code === 'request_timeout' && !isApplicationReturn(message.return?.wire))
+          error = new PublicError('cancelled', 'Request cancelled');
         respond(message, value, error);
       };
       void pending.then(

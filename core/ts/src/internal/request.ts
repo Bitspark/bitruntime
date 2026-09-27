@@ -18,6 +18,20 @@ import { traceMembers } from './trace.ts';
 /** How long a call waits for its response when it states no deadline of its own. */
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
+// The return capabilities of applications' own calls: returns no carrier
+// established, which never cross a wire.
+const applicationReturns = new WeakSet<object>();
+
+/**
+ * Whether wire is the return capability of an application's own call. A peer
+ * whose deadline for such a call passes fails it with the caller's own
+ * `request_timeout`; any other return may cross a wire, where bitwire/1 never
+ * carries a `request_timeout`.
+ */
+export function isApplicationReturn(wire: unknown): boolean {
+  return typeof wire === 'object' && wire !== null && applicationReturns.has(wire);
+}
+
 /** The completion and deadline of one call. */
 export function requestCompletion<T>() {
   let settled = false;
@@ -148,6 +162,7 @@ export function request<T>(
       invocation.settle();
     },
   };
+  if (!dispatch) applicationReturns.add(returning);
   const address: ReturnAddress = { wire: returning };
   const retire = () => {
     clearDispatchContext(address);

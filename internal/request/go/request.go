@@ -53,6 +53,39 @@ func (w *Reply) BitruntimeDelivery() *delivery.Context { return w.dispatch }
 // Invocation exposes this return capability's lifecycle to its owner.
 func (w *Reply) Invocation() *core.Invocation { return w.invocation }
 
+// Own is the return capability of an application's own call, if message
+// carries one: a Reply that no carrier established. A peer whose deadline for
+// such a call passes fails it locally with Expire; any other return may cross
+// a wire and is answered.
+func Own(message wire.Message) (*Reply, bool) {
+	if message.Return == nil {
+		return nil, false
+	}
+	reply, ok := message.Return.Wire.(*Reply)
+	if !ok || reply.dispatch != nil {
+		return nil, false
+	}
+	return reply, true
+}
+
+// Expire settles the call with err and no response. bitwire/1 fails a call
+// locally when its caller's deadline passes: that error is the caller's own
+// and never a frame.
+func (w *Reply) Expire(err error) error {
+	select {
+	case <-w.done:
+		return transports.ErrClosed
+	default:
+	}
+	select {
+	case w.reply <- Result{Err: err}:
+		w.invocation.Settle()
+		return nil
+	default:
+		return errors.New("bitruntime: duplicate wire response")
+	}
+}
+
 func (w *Reply) Send(path []string, message wire.Message) error {
 	if len(path) != 0 {
 		return w.invocation.Deliver(path, message)

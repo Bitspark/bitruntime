@@ -1,7 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 (27 September 2026)
 
+- A peer's own deadline for a call is its caller's (bitruntime#23). In Go an
+  application's own call now fails with `context.DeadlineExceeded`, not a public
+  `cancelled`. In TypeScript a call the root forwards is now answered
+  `cancelled` across the wire, not `request_timeout`, which bitwire/1 never
+  carries in a frame.
+- The TypeScript testee reports 1009 when its WebSocket refuses a frame over
+  the peer's limit, for dialled, accepted and `peer.over` peers, as the Go
+  testee does, instead of the 1006 its socket's close reports when the remote
+  does not answer the close. Both testees now support the core claim of
+  bitwire's conformance contract, 345 of 345 cases in every pairing.
 - Name both asset URLs when installing the TypeScript testee under npm 12,
   whose `allow-remote=root` refuses the runtime URL as the testee's own
   dependency.

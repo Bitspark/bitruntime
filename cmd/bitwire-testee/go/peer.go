@@ -91,9 +91,8 @@ func (p *peer) shutdown() {
 //
 // request_timeout_ms is a call's deadline, which bitruntime's call helper
 // takes per call (dispatch.CallOptions.Timeout). It is not the engine's
-// RequestTimeout, which also bounds every request the peer's root forwards
-// and every incoming handler, and whose passing the root answers its caller
-// with a public cancelled error rather than as a deadline.
+// RequestTimeout, which also bounds every incoming handler, a deadline the
+// contract's option does not name; that stays the runtime's.
 type peerOptions struct {
 	engine  engine.Options
 	limit   int64
