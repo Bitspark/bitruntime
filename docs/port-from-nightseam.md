@@ -111,6 +111,14 @@ None changes a `bitwire/1` frame.
   `MaxFrameBytes`, by a connection whose limit is laxer, also ends with 1009,
   which bitwire/1 binds for a frame over the receiver's limit (SCOPE, Limits);
   v0.6.0's peers closed 4011 there (found by the testees, bitruntime#20).
+- **A peer's deadline is its caller's (bitruntime#23).** When a peer's own
+  deadline for a call passes, an application's own call fails locally with the
+  error its own deadline gives: `context.DeadlineExceeded` in Go,
+  `request_timeout` in TypeScript. A `cancel` goes to the remote. A request the
+  root carries for another carrier is answered `cancelled`, because bitwire/1
+  makes `request_timeout` the caller's own error, never a frame. v0.6.0's Go
+  root answered its own caller `cancelled`, and its TypeScript root sent
+  `request_timeout` back through a forwarded request's carrier.
 - **Copy, then validate (research 0001, row 28).** The pair, the root and the
   call helper's reply copy a message's payloads before validating them, so a
   caller that mutates its message during `Send` cannot admit bytes that were
