@@ -183,15 +183,24 @@ browser/server and parent/child boundaries can share the same model once their
 bindings actually preserve those guarantees. An opaque browser carrier alone
 does not prove complete remote-tree access.
 
-## Runtime delivery still required
+## Carrying trees across carriers
 
-The Go/TypeScript core now provides composition, selection, complete parts,
-derived sending and a local AddressedWire facade. It is independently checked
-against bitwire's structural oracle. This is not a networking release.
-The [kickoff](bitsystem3-migration-kickoff.md) still requires remaining runtime
-implementation, independent carrier conformance, remote bridges, admission
-and lifecycle evidence, interoperable released packages, and the complete
-bitsystem3 adoption. The wider services work remains tracked in
+v0.1.0 delivered the structural core: composition, selection, complete parts,
+derived sending and a local `AddressedWire` facade, checked against bitwire's
+structural oracle. v0.2.0 added the `bitwire/1` networking path, which
+bitsystem3 runs on. v0.3.0 adds the two explicit bridges a `WireTree` needs
+across a carrier. A carrier path names a position, not a node, so neither bridge
+infers structure from an opaque endpoint:
+
+- `Bind` gives a near tree an addressless `Wire` at each far position it names.
+- `Serve` routes each UTF-8 position of a far tree to that position's own
+  `Wire`, and replaces the served tree atomically, keeping each admitted
+  request with the node that admitted it.
+
+bitwire's `conformance/wiretree` cases check these compositions over the local
+pair and WebSockets in both directions. Mapping bitsystem3's spaces to trees is
+[bitsystem3 #11](https://github.com/Bitspark/bitsystem3/issues/11). The wider
+services work remains tracked in
 [deixis-svc #1](https://github.com/Bitspark/deixis-svc/issues/1),
 [bitwire-svc #9](https://github.com/Bitspark/bitwire-svc/issues/9) and
 [bitstore-svc #13](https://github.com/Bitspark/bitstore-svc/issues/13).

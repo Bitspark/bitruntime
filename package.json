@@ -1,6 +1,6 @@
 {
   "name": "@bitspark/bitruntime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The TypeScript implementation of the bitwire contract: trees, addressed operators, the local pair, dispatch, the bitwire/1 protocol engine and its transports.",
   "license": "Apache-2.0",
   "type": "module",
