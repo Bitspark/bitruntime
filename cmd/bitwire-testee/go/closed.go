@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/coder/websocket"
-
 	transports "github.com/Bitspark/bitruntime/transports/go"
 )
 
@@ -66,16 +64,13 @@ func (w *watched) Send(ctx context.Context, frame transports.Frame) error {
 }
 
 // saw notes an error the transport reported: the remote's close, with its
-// code, or a frame over the receive limit, which the WebSocket refused with
-// 1009. Any other error is this side's to act on, and its close or abort
-// says how the connection ended.
+// code, or this side's refusal of a frame over its receive limit, which every
+// transport reports as a local close with 1009. Any other error is this
+// side's to act on, and its close or abort says how the connection ended.
 func (w *watched) saw(err error) {
 	var closeErr *transports.CloseError
-	switch {
-	case errors.As(err, &closeErr):
+	if errors.As(err, &closeErr) {
 		w.end(closeErr.Code)
-	case errors.Is(err, websocket.ErrMessageTooBig):
-		w.end(transports.CodeTooLarge)
 	}
 }
 

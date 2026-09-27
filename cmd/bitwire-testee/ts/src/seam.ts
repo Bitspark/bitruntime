@@ -228,10 +228,8 @@ export function seamOps(t: Testee): Record<string, Op> {
       return { handle: t.mint('c', new Conn(webSocketConnection(asLike(socket)), socket, lazy)) };
     },
     'conn.pipe': (args) => {
-      // bitruntime's TypeScript pipe has no receive limit to configure.
-      if (args.limit !== undefined) throw unsupported('the pipe has no receive limit');
       const lazy = lazyOf(args);
-      const [a, b] = pipe();
+      const [a, b] = pipe(intOf(args, 'limit', DEFAULT_LIMIT));
       return { a: t.mint('c', new Conn(a, undefined, lazy)), b: t.mint('c', new Conn(b, undefined, lazy)) };
     },
     'conn.send': async (args) => {
