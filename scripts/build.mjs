@@ -1,0 +1,10 @@
+import {rmSync} from 'node:fs';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawnSync} from 'node:child_process';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=resolve(root,'dist');
+if(dirname(output)!==resolve(root))throw new Error('build output escaped repository');
+rmSync(output,{recursive:true,force:true});
+const result=spawnSync(process.execPath,[resolve(root,'node_modules/typescript/bin/tsc'),'-p',resolve(root,'tsconfig.json')],{cwd:root,stdio:'inherit'});
+process.exitCode=result.status??1;

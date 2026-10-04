@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+- Replace the generic boundary with bitwire 0.4.0's duplex envelope Wire.
+- Implement bounded local pairs and binary WebSocket carriers in Go and TypeScript; keep complete byte-keyed trees separate.
+- Remove the RPC engine, dispatch helpers, transport seam, compatibility exports and protocol selection.
+- Verify independent contract observations, byte vectors, TLS/lifecycle cases, cross-language peers and fresh consumer installs.
+
+## Earlier development
 
 - TypeScript refuses a close reason it cannot send as it is: not valid UTF-8
   (an unpaired surrogate), or over 123 bytes. The adapter, the pipe and a

@@ -1,59 +1,10 @@
 bitruntime
 Copyright 2026 Bitspark and the bitruntime contributors
 
-This product includes software developed at Bitspark (https://github.com/Bitspark).
+This product includes software developed at Bitspark (https://github.com/Bitspark), under the Apache License, Version 2.0.
 
-The structural-core implementations are written against the public bitwire
-0.3.0 contract. Structural test expectations are derived from bitwire's
-independent conformance/trees/expected.json under Apache-2.0. No nightseam
-runtime source is ported in the v0.1.0 structural core.
+The current implementations follow the public bitwire 0.4.0 contract. Independent envelope bytes and conformance cases are from bitwire at cf0647efa4513b98010398b18d73422024eaf5ac, also Apache-2.0.
 
-Ported from nightseam
----------------------
+The TypeScript WebSocket host-effect and lifecycle implementation and its local TLS test fixtures derive from the system2 experiment at a866f502933a43d4e24eda7bc01e4aabf38073b8 (Bitspark, 2026), adapted to the shared contract. The fixture private key is public test data only.
 
-The transports, the addressed operators, the local pair, the invocation
-lifecycle, the dispatcher and helpers, and the bitwire/1 protocol engine are
-ported from Nightseam (https://github.com/Bitspark/nightseam), Copyright 2026
-Bitspark and the Nightseam contributors, licensed under the Apache License,
-Version 2.0. The port is from the released v0.6.0 only, commit
-5cc9723a24646c40ed1861f892b2b23eb6d785d7; none of its later, unreleased commits
-is included. The unmodified sources are recorded in this repository's history
-as their own commit, and every modification is a later commit.
-
-  nightseam v0.6.0                  bitruntime
-  duplex/go/duplex.go, pipe.go      transports/go
-  duplex/go/ws/ws.go                transports/websocket/go
-  duplex/go/wire.go                 core/go/addressed.go, internal/profile/go
-  runtime/go/wire_pair.go           core/go/pair.go
-  runtime/go/invocation.go          core/go/invocation.go
-  runtime/go/publication.go,
-    meta.go, trace.go               core/go
-  runtime/go/wire.go                core/go/forward.go, core/go/errors.go,
-                                    dispatch/go/dispatch.go,
-                                    internal/request/go, engine/go/wire.go
-  runtime/go/dispatcher.go          dispatch/go/dispatcher.go
-  runtime/go/peer.go                engine/go/peer.go, internal/profile/go
-  runtime/go/http.go                engine/websocket/go
-  runtime/go/json.go,
-    internal/scalarjson             internal/profile/go
-  duplex/ts/src/index.ts            transports/ts
-  duplex/ts/src/wire.ts             core/ts/src/addressed.ts,
-                                    core/ts/src/internal/path.ts
-  runtime/ts/src/wire-pair.ts,
-    invocation.ts, trace.ts,
-    error.ts                        core/ts/src
-  runtime/ts/src/envelope.ts,
-    unicode.ts                      core/ts/src/internal
-  runtime/ts/src/wire.ts            dispatch/ts/src, core/ts/src/forward.ts,
-                                    core/ts/src/internal, engine/ts/src
-  runtime/ts/src/dispatcher.ts      dispatch/ts/src/dispatcher.ts
-  runtime/ts/src/peer.ts            engine/ts/src/peer.ts
-  runtime/go and runtime/ts tests   the corresponding *_test.go and ts/test
-  conformance/go/testee/main.go,
-    conn.go, peer.go, ops.go,
-    observe.go                      cmd/bitwire-testee/go
-  conformance/ts/src/testee.ts,
-    seam.ts, peer.ts                cmd/bitwire-testee/ts/src
-
-The files under vectors/bitwire-1/ are byte-identical copies of nightseam
-v0.6.0's conformance/tables/frames.json, serials.json and unicode.json.
+Earlier runtime implementations included code from nightseam v0.6.0, commit 5cc9723a24646c40ed1861f892b2b23eb6d785d7, Copyright 2026 Bitspark and the nightseam contributors, Apache-2.0. Those implementations have been replaced; their source and attribution remain recorded in Git history.

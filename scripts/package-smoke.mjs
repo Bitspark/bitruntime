@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import {spawnSync} from 'node:child_process';
+import {spawnSync, execFileSync} from 'node:child_process';
 import {existsSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 // Packs the root TypeScript package, installs the tarball into a fresh
@@ -11,10 +11,16 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 if (!existsSync(join(root, 'dist', 'core', 'ts', 'src', 'index.js'))) throw new Error('Run npm run build before the package smoke.');
 const temp = mkdtempSync(join(tmpdir(), 'bitruntime-consumer-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmScript = process.platform === 'win32' ? [process.env.npm_execpath,
+  ...execFileSync('where.exe', ['npm.cmd'], {encoding:'utf8'}).trim().split(/\r?\n/)
+    .map(command => join(dirname(command), 'node_modules/npm/bin/npm-cli.js'))]
+  .find(candidate => candidate && existsSync(candidate)) : undefined;
+if (process.platform === 'win32' && !npmScript) throw new Error('Cannot locate the installed npm CLI script');
 function run(command, args, cwd, capture = false) {
+  if (command === npm && npmScript) { command = process.execPath; args = [npmScript, ...args]; }
   const result = spawnSync(command, args, {
     cwd,
-    shell: process.platform === 'win32' && command.endsWith('.cmd'),
+    shell: false,
     encoding: 'utf8',
     stdio: capture ? 'pipe' : 'inherit',
   });
@@ -22,53 +28,27 @@ function run(command, args, cwd, capture = false) {
   return result.stdout;
 }
 
-const packed = JSON.parse(run(npm, ['pack', '--json', '--pack-destination', temp], root, true));
+const packOutput = JSON.parse(run(npm, ['pack', '--json', '--pack-destination', temp], root, true));
+// npm 12 keys results by package name; Node's bundled npm returns a list.
+const packed = Array.isArray(packOutput) ? packOutput : Object.values(packOutput);
 const files = packed[0].files.map((file) => file.path);
-for (const required of ['LICENSE', 'NOTICE', 'README.md', 'package.json', 'dist/core/ts/src/index.js', 'dist/dispatch/ts/src/index.d.ts'])
+for (const required of ['LICENSE', 'NOTICE', 'README.md', 'package.json', 'dist/core/ts/src/index.js', 'dist/websocket/ts/src/index.d.ts'])
   assert.ok(files.includes(required), `the tarball lacks ${required}`);
 assert.ok(!files.some((file) => /\/test\//.test(file) || file.endsWith('.go')), 'the tarball carries tests or Go sources');
 writeFileSync(join(temp, 'package.json'), '{"type":"module","private":true}\n');
 run(npm, ['install', '--ignore-scripts', '--no-audit', '--@bitspark:registry=https://registry.npmjs.org', join(temp, packed[0].filename)], temp);
 writeFileSync(join(temp, 'smoke.mjs'), `
 import assert from 'node:assert/strict';
-import {compose, select, send, asAddressed, pair, PublicError} from '@bitspark/bitruntime/core';
-import {call, createDispatcher, handle} from '@bitspark/bitruntime/dispatch';
-import {Peer, PROTOCOL} from '@bitspark/bitruntime/engine';
-import {pipe, sendable} from '@bitspark/bitruntime/transports';
-
-const key = new TextEncoder().encode('child');
-const seen = [];
-const primitive = {send(message) { seen.push(message); }};
-const leaf = compose(primitive);
-const tree = compose({send() { throw new Error('wrong own'); }}, [[key, leaf]]);
-const message = {frame: {version: 1, kind: 'event', data: {ok: true}}};
-assert.equal(select(tree, [key]), leaf);
-assert.equal(tree.decompose().children[0][1], leaf);
-send(tree, [key], message);
-asAddressed(tree).send(['child'], message);
-assert.deepEqual(seen, [message, message]);
-assert.throws(() => send(tree, [Uint8Array.of(255)], message));
-
-const [caller, callee] = pair();
-const dispatcher = createDispatcher(callee);
-handle(dispatcher, ['echo'], (value) => value);
-assert.equal(await call(caller, ['echo'], 'through a pair'), 'through a pair');
-await assert.rejects(call(caller, ['absent']), (error) => error instanceof PublicError && error.code === 'method_not_found');
-caller.close();
-
-const [near, far] = pipe();
-const client = new Peer();
-const server = new Peer({role: 'server', prepare: (peer) => handle(createDispatcher(peer.wire()), ['echo'], (value) => value)});
-await Promise.all([client.attach(near), server.attach(far)]);
-assert.equal(await call(client.wire(), ['echo'], PROTOCOL), 'bitwire/1');
-client.close();
-assert.equal(sendable(1006), false);
-
-// The received-context machinery is module-private: no subpath reaches it.
-for (const hidden of ['@bitspark/bitruntime', '@bitspark/bitruntime/core/ts/src/internal/context.js', '@bitspark/bitruntime/dist/core/ts/src/internal/context.js']) {
-  await assert.rejects(import(hidden), (error) => ['ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_MODULE_NOT_FOUND'].includes(error.code), hidden);
-}
-console.log('Fresh installed npm tarball consumer passed.');
+import {atom,tuple} from '@bitspark/bitwire';
+import {pair,compose} from '@bitspark/bitruntime/core';
+import {connectWebSocket,listenWebSocket} from '@bitspark/bitruntime/websocket';
+const envelope={source:[],destination:[atom([])],id:atom([]),payload:tuple([atom([255,0])])};
+const [left,right]=pair();const local=new Promise(r=>right.receive(r));await left.send(envelope);assert.ok((await local).payload.equals(envelope.payload));await left.close();
+const leaf=compose(7);assert.equal(compose(3,[[atom([]),leaf]]).at([atom([])]),leaf);
+const server=await listenWebSocket({},wire=>wire.receive(e=>{void wire.send(e);}));
+const client=await connectWebSocket(server.url);const remote=new Promise(r=>client.receive(r));await client.send(envelope);assert.ok((await remote).payload.equals(envelope.payload));await client.close();await server.close();
+for(const retired of ['engine','dispatch','transports'])await assert.rejects(import('@bitspark/bitruntime/'+retired),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+console.log('Fresh installed package: local pair, tree and WebSocket passed.');
 `);
 run(process.execPath, ['smoke.mjs'], temp);
 const metadata = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

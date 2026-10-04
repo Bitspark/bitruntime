@@ -12,5 +12,8 @@
     "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["core/ts/src/**/*.ts", "transports/ts/src/**/*.ts", "dispatch/ts/src/**/*.ts", "engine/ts/src/**/*.ts"]
+  "include": [
+    "core/ts/src/**/*.ts",
+    "websocket/ts/src/**/*.ts"
+  ]
 }

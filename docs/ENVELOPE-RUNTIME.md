@@ -2,9 +2,9 @@
 
 Defined before runtime code, 4 October 2026. Owner-approved clean cut.
 The contract is bitwire decision 0014 and docs/wire/{contract,carriers}.md,
-committed before dependent code at e490e7bfc7f2. The target public dependency is
+committed before dependent code at cf0647efa4513b98010398b18d73422024eaf5ac. The target public dependency is
 bitwire 0.4.0. The cube adoption boundary is system/WIRE-SHARED.md at model
-f0bfda81316664ba5a22cfb2d3f3e15b25c6b16f. That adoption does not make a cube or
+55fd1641c4bf7065e62083efa31a46559f47ee5e. That adoption does not make a cube or
 a service dependency part of this runtime.
 
 ## Realization and observations
@@ -23,7 +23,7 @@ queued envelopes. Queue bounds describe undelivered traffic, not total process
 memory or application-retained values. Full finite DeixisNode<T> construction,
 exact partial selection and decomposition remain generic. A complete node's own
 value is independent of its children. Duplicate byte keys and structural cycles
-are rejected. Exact routing to a leaf never falls back to an ancestor. A router
+are rejected; tree validation is bounded at depth 4096. Exact routing to a leaf never falls back to an ancestor. A router
 handler does not acquire discovery merely by matching a path.
 
 WebSocket encodes bitwire/envelope/1 and negotiates only bitwire.ontos.v1. Binary
@@ -34,7 +34,7 @@ establishment; no service timeout is hidden in a wire. Close releases owned
 resources before terminal observation, with a five-second closing bound followed
 by forced release. Caller-owned HTTP/HTTPS servers remain caller-owned. A
 convenience listener owns its listening handle. Establishment authorization
-never makes a claimed source path an authenticated identity.
+never makes a claimed source path an authenticated identity. Servers accept absent Origin or matching authority by default; explicit native origin allowlists can widen that policy.
 
 Expected observations: independent bitwire pair cases; snapshot/duplex/detach/
 close/overflow/handler-failure cases; byte-path tree selection; exact independent
@@ -61,5 +61,27 @@ lands on main; immutable 0.5.0 tag produces the established GitHub package asset
 and checksums, which are verified by fresh consumers. Registry publication of
 bitruntime is not inferred from an npm-compatible tarball.
 
-Evidence and full integration review are pending; old release test results are
-not reused as evidence for this breaking replacement.
+## Implementation review and evidence
+
+The complete replacement diff removes the old engine/dispatch/transport code,
+exports, driver testees and interop fixtures. Both implementations import
+bitwire 0.4.0 directly; the final package lock resolves its public npm tarball,
+and Go has no local module replacement.
+
+Local evidence: strict TypeScript, 13 native TypeScript tests, bitwire-owned
+pair observations, Go vet and native tests, Go/TypeScript exchanges in both
+connection roles, and a fresh installed package exercising local delivery,
+structural selection and WebSocket. Independent bytes cover an empty envelope;
+other tests cover binary/slash/empty paths, unknown embeddings, duplicate IDs,
+TLS, origin refusal, detached queue overflow, admission refusal and resource
+ownership. A stalled peer exposed that coder/websocket CloseNow waits for an
+already-started handshake; the force-close timer now cancels carrier I/O and
+awaits the timer callback before reporting release. This regression passes.
+
+Review also found and corrected outgoing byte accounting (count pending encoded
+bytes, excluding carrier framing), supplied-child validation, and npm 12's
+package-keyed pack output in the fresh-consumer checker. The local Windows Go
+race build fails in runtime/cgo; Linux CI must pass the race gate before landing.
+No historical test result stands in for validation of this replacement. The PR
+and immutable release workflows record the integration and public-consumer
+results required by the exit criteria above.

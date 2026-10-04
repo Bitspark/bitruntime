@@ -1,150 +1,57 @@
 # bitruntime
 
-The Go and TypeScript implementation of the
-[bitwire](https://github.com/Bitspark/bitwire) contract.
+Go and TypeScript implementations of [bitwire 0.4.0](https://github.com/Bitspark/bitwire/tree/v0.4.0): a generic duplex envelope Wire, local pairs, binary WebSocket carriers and complete byte-keyed trees.
 
-**Status: the runtime path hand-written adapters use is implemented** (the next
-release after the structural core 0.1.0):
+`send` means local admission. Paths and identifiers contain exact bytes; payloads are immutable ground ontos values. Receivers have one detachable owner. Endpoints enforce finite envelope and queue bounds, and `closed` observes release of owned carrier resources. Invocation and service conventions belong to consumers.
 
-- **core:** full tree construction, selection, decomposition and derived
-  sending; the addressed operators `At`, `Mount` and `Forward`; the local pair;
-  the invocation lifecycle.
-- **transports:** the frame transport seam, the in-memory pipe and WebSocket.
-- **engine:** the `bitwire/1` protocol engine and WebSocket connection setup.
-- **dispatch:** the dispatcher and the `Call`, `Emit`, `Handle` and `Register`
-  helpers.
+## TypeScript
 
-The runtime is ported from nightseam v0.6.0 with its provenance in `NOTICE`, and
-fixes nightseam's recorded defects in this path; see
-[the port record](docs/port-from-nightseam.md). The engine interoperates with
-nightseam v0.6.0 peers in both roles and both languages and sends the same
-bytes (`node scripts/interop.mjs`). Live references, tunnels, the framed byte
-stream, telemetry and authentication integration remain planned under
-[bitwire decision 0010](https://github.com/Bitspark/bitwire/blob/main/docs/decisions/0010-bitwire-holds-the-contract-and-bitruntime-implements-it.md).
-
-## Where it sits
-
-```text
-bitruntime  →  bitwire (the contract, the protocol and carrier specifications, conformance)
-```
-
-- **bitwire** specifies addressless `Wire`, structural `WireTree`, and the
-  separate `AddressedWire` carrier access contract. bitruntime implements them.
-- **bitwire's conformance cases** judge bitruntime as an external implementation,
-  written from the specification and never recorded from this code.
-- **What bitruntime depends on.** bitwire, and in separate modules, the libraries a
-  transport needs.
-- **What it does not depend on.** The contract language (bittype), the adapters
-  (bitlink), or nightseam.
-
-## The primitive and tree contract
-
-The maintainer's accepted naming is symmetric across interaction and storage:
-
-```ts
-interface Wire { send(message: Message): void; }
-interface Data { read(): Promise<Bytes>; }
-
-type WireTree = DeixisNode<Wire>;
-type DataTree = DeixisNode<Data>;
-```
-
-Both trees have the same full deixis structure: an own primitive, complete
-children keyed by exact bytes, partial path selection, decomposition and
-reconstruction. For a present path:
-
-```text
-send(tree, path, message) = select(tree, path).own().send(message)
-read(tree, path)          = select(tree, path).own().read()
-```
-
-`Wire` belongs to bitwire; `Data` belongs to bitstore. A `Data` is a reading
-capability. A materialized `DeixisNode<Bytes>` remains the codec snapshot, not
-the definition of `DataTree`.
-
-The old path-taking interface is explicitly `AddressedWire`. It can be an
-opaque router and does not provide a `WireTree`'s structural guarantees.
-`Endpoint` extends that access contract and owns receiving/closing; the
-`bitwire/1` profile and return capabilities retain addressed access. The runtime
-must provide explicit bridges without inventing children for opaque peers.
-
-See [the contract and migration boundaries](docs/wire-under-bitwire.md).
-The structural core implements these tree obligations. It does not infer a
-tree from an opaque addressed endpoint, queue invocations, or own endpoint
-lifetime. Derived sending preserves the selected primitive's admission/refusal
-and message/return-capability identity.
-
-Two explicit bridges carry a tree across a carrier, which names positions, not
-nodes:
-
-- `Bind`/`bind` gives the near side an addressless `Wire` that sends at one
-  fixed addressed path; a near tree binds each far position it names.
-- `Serve`/`serve` gives the far side one exact dispatcher route per position
-  whose keys are UTF-8, bound to that position's own `Wire`. `Update` replaces
-  the served tree atomically, and a request admitted before a replacement keeps
-  the node that admitted it, its cancellation included.
-
-## Packages
-
-Go uses one module, `github.com/Bitspark/bitruntime`, released by root tags:
-
-| Package | Holds |
-| --- | --- |
-| `core/go` | Trees, `At`, `Bind`, `Mount`, `Forward`, `NewPair`, the invocation lifecycle, `Respond`, `PublicError` |
-| `transports/go` | The seam, `Pipe`, close codes and `Sendable`, the closed classification `ErrClosed` |
-| `transports/websocket/go` | The WebSocket transport |
-| `engine/go` | The `bitwire/1` `Peer` over any transport |
-| `engine/websocket/go` | `Accept`, `NewHandler` and `Dial` over WebSockets |
-| `dispatch/go` | `NewDispatcher` and its atomically replaced `RouteSet`, `Serve`, `Call`, `Emit`, `Handle`, `Register` |
-| `cmd/bitwire-testee/go` | The Go driver-1 testee for bitwire's `bitwire/1` conformance contract (a command, not a library) |
-
-A program links only the packages it imports; `coder/websocket` and `net/http`
-enter only through the WebSocket packages. TypeScript uses one package,
-`@bitspark/bitruntime`, built at the repository root with the subpaths
-`./core`, `./transports`, `./engine` and `./dispatch`, so the received context
-its components share stays private to the package. (v0.1.0 shipped the
-structural core alone as `@bitspark/bitruntime-core`.) Both depend on the public bitwire 0.3.0 contract. Releases
-publish a root Go tag and a TypeScript tarball with checksums on GitHub; npm
-registry publication is not configured. Read [RELEASING.md](RELEASING.md).
-
-Each release also carries bitruntime's driver-1 testees for bitwire's
-`bitwire/1` conformance contract: the Go command `cmd/bitwire-testee/go` and
-the TypeScript asset `bitspark-bitruntime-testee-<version>.tgz`. They are test
-tooling that bitwire's runner drives, never a runtime dependency. Under npm 12,
-install the testee together with the runtime's asset URL. Read
-[`cmd/bitwire-testee`](cmd/bitwire-testee/README.md).
-
-To install a release, require the Go module at its tag and the TypeScript
-package from its release asset:
+Install the release package and the shared contract:
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.4.2
-npm install https://github.com/Bitspark/bitruntime/releases/download/v0.4.2/bitspark-bitruntime-0.4.2.tgz
+npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.4.0 https://github.com/Bitspark/bitruntime/releases/download/v0.5.0/bitspark-bitruntime-0.5.0.tgz
 ```
 
-npm 12 refuses dependencies that are tarball URLs unless the project allows
-them. Add `allow-remote=root` to the project's `.npmrc`; it admits only the URLs
-the project's own `package.json` names. Where a user configuration maps the
-`@bitspark` scope to another registry, also pin
-`@bitspark:registry=https://registry.npmjs.org/` there, since the package's
-dependency `@bitspark/bitwire` comes from npm.
+```ts
+import { atom, tuple } from '@bitspark/bitwire';
+import { pair } from '@bitspark/bitruntime/core';
 
-The generic core uses bitwire's native node declarations. TypeScript accepts
-bitstore's matching structural node type directly; Go requires an explicit
-adapter between the two packages' recursive node types. The shared semantic
-contract does not imply direct Go assignability.
+const [left, right] = pair();
+right.receive(envelope => console.log(envelope.payload));
+await left.send({ source: [], destination: [atom([])], id: atom([1]), payload: tuple([]) });
+await left.close();
+```
 
-## Read first
+`/core` exports `pair`, `compose`, `select` and `route`. Trees are separate from endpoint discovery: accepting paths does not imply complete child enumeration.
 
-- [Charter](CHARTER.md): what this repository owns, promises and is checked by.
-- [Release scope](docs/RELEASE.md) and [release process](RELEASING.md).
-- [Working here as an agent](AGENTS.md).
-- [Repository layout](LAYOUT.md) and the
-  [interactive kickoff for the bitsystem3 migration](docs/bitsystem3-migration-kickoff.md).
-- [bitwire's carrier specification](https://github.com/Bitspark/bitwire/blob/main/docs/wire/carriers.md)
-  and [the contract](https://github.com/Bitspark/bitwire/blob/main/docs/wire/contract.md).
+`/websocket` exports `connectWebSocket`, `listenWebSocket` and `bindWebSocketServer`. A binding owns its accepted endpoints but leaves a supplied HTTP/HTTPS server open. A convenience listener owns its HTTP server too. WebSocket uses `bitwire.ontos.v1` and canonical binary `bitwire/envelope/1` messages.
 
-## Source layout
+## Go
 
-Read [LAYOUT.md](LAYOUT.md) for the component-first, two-letter language
-directory convention and this repository's adoption notes.
+```sh
+go get github.com/Bitspark/bitruntime@v0.5.0
+```
+
+Use `core/go.NewPair` and `websocket/go.Dial`, `Accept`, `NewServer` or `Listen`. These return endpoints implementing `github.com/Bitspark/bitwire/wire/go.Wire` directly. A Go receiver runs on its endpoint's dispatcher; application work may spawn its own goroutines. Close does not wait for or cancel already dispatched application work.
+
+## Limits and ownership
+
+Defaults: 16 MiB encoded envelope, 64 MiB queued encoded bytes and 1024 queued envelopes in each direction; codec depth 4096. Invalid or oversized outgoing envelopes are refused before admission. Incoming overflow fails the endpoint. A local pair's overflow fails both ends and refuses the overflowing send. Duplicate IDs remain distinct admissions.
+
+Connections use normal TLS certificate verification. Dialing has a ten-second establishment bound. Closure has a five-second grace period before forced carrier release. These bounds do not impose service deadlines. Servers accept absent Origin or a matching authority by default. TypeScript's `allowedOrigins` and Go's `OriginPatterns` explicitly permit other origins; `authorize`/`Authorize` supplies host authentication policy. Claimed source paths never authenticate callers.
+
+Complete tree construction rejects duplicate byte keys, cycles and malformed children. Validation has a depth bound of 4096. Child nodes retain identity; supplied implementations must keep obeying the tree laws after construction.
+
+## Validation and delivery
+
+```sh
+go vet ./...
+go test -race -count=1 ./...
+npm ci --ignore-scripts
+npm run check
+npm test
+node scripts/interop.mjs
+node scripts/package-smoke.mjs
+```
+
+Tests use bitwire-owned conformance observations, independent envelope bytes, native carrier failures, TLS, resource release and cross-language peers. The package smoke installs a packed tarball into a fresh project. [RELEASING.md](RELEASING.md) defines the public Go tag and GitHub package asset process. [The realization record](docs/ENVELOPE-RUNTIME.md) defines this clean replacement and its evidence.
