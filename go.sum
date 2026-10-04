@@ -1,6 +1,4 @@
-github.com/Bitspark/bitwire v0.3.0 h1:RXgSS3XR1rHBMXu8dDvP3RHF16E8Uyt2aTfATRXzbhA=
-github.com/Bitspark/bitwire v0.3.0/go.mod h1:RCsIrMm1o0hg/SlyG2LkXXSzj2CMLEhoOIuuw8XrePk=
+github.com/Bitspark/bitwire v0.4.0 h1:LsH1WXSL8E+KmseMcRIEBkrdVyFjj0dcqQypR8SZ3DE=
+github.com/Bitspark/bitwire v0.4.0/go.mod h1:RCsIrMm1o0hg/SlyG2LkXXSzj2CMLEhoOIuuw8XrePk=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 h1:UADEEmDKgfXbtnGJZ97beY5XLo9ZechG1nlU4KnRrkE=
-github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=

@@ -1,231 +1,110 @@
-// Package core constructs full Deixis trees and derives sending from selection.
-// It implements bitwire's structural contract without a carrier or dispatcher.
 package core
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"reflect"
-	"unicode/utf8"
-
 	wire "github.com/Bitspark/bitwire/wire/go"
+	"reflect"
 )
 
-var (
-	ErrDuplicateKey = errors.New("bitruntime: duplicate child key")
-	ErrInvalidTree  = errors.New("bitruntime: invalid tree")
-	ErrCycle        = errors.New("bitruntime: structural cycle")
-	ErrMissingPath  = errors.New("bitruntime: missing tree path")
-	ErrInvalidPath  = errors.New("bitruntime: invalid addressed path")
-	ErrInvalidWire  = errors.New("bitruntime: missing own wire")
-)
-
-// node is immutable in topology and own-value association. The generic payload
-// need not itself be immutable: a Wire is a capability, not a copied value.
-type node[T any] struct {
+type Node[T any] struct {
 	own      T
 	children []wire.Child[T]
-	byKey    map[string]wire.DeixisNode[T]
 }
 
-// Compose constructs a full node. It copies the child collection and all keys,
-// preserves own and child capability identity, and rejects a missing own value,
-// duplicate keys, nil children, and cycles identifiable by Go node identity.
-// Every node has an own value (bitwire decision 0012): a nil interface, pointer,
-// map, slice, channel or function own is refused as ErrInvalidTree. Empty and
-// arbitrary binary keys are valid.
-//
-// Independently implemented children must satisfy DeixisNode's finite, stable
-// topology contract. Compose validates their complete Children graph; continued
-// stability is their implementation's responsibility. Comparable node identities
-// permit cycle detection and shared-node deduplication. Value implementations
-// without comparable identity are also supported under the same finite-tree
-// precondition; no generic traversal can guarantee termination for a foreign
-// implementation that violates it. Payloads need not be comparable.
-// Construction and validation do not call Own, At, or any payload operation on
-// children. There is no transformation from an opaque AddressedWire to a tree.
-func Compose[T any](own T, children []wire.Child[T]) (wire.DeixisNode[T], error) {
-	if isNil(any(own)) {
-		return nil, fmt.Errorf("%w: missing own value", ErrInvalidTree)
-	}
-	copied, err := copyChildren(children)
-	if err != nil {
-		return nil, err
-	}
-	if err := validate(copied); err != nil {
-		return nil, err
-	}
-	n := &node[T]{own: own, children: copied, byKey: make(map[string]wire.DeixisNode[T], len(copied))}
-	for _, child := range copied {
-		n.byKey[string(child.Key)] = child.Tree
-	}
-	return n, nil
-}
-
-func copyChildren[T any](children []wire.Child[T]) ([]wire.Child[T], error) {
-	result := make([]wire.Child[T], len(children))
-	keys := make(map[string]struct{}, len(children))
-	for i, child := range children {
-		key := string(child.Key)
-		if _, exists := keys[key]; exists {
-			return nil, fmt.Errorf("%w: %x", ErrDuplicateKey, child.Key)
+func Compose[T any](own T, children []wire.Child[T]) (*Node[T], error) {
+	captured := append([]wire.Child[T]{}, children...)
+	for i, c := range captured {
+		if c.Node == nil {
+			return nil, errors.New("nil child")
 		}
-		if isNil(child.Tree) {
-			return nil, fmt.Errorf("%w: nil child at key %x", ErrInvalidTree, child.Key)
-		}
-		keys[key] = struct{}{}
-		result[i] = wire.Child[T]{Key: bytes.Clone(child.Key), Tree: child.Tree}
-	}
-	return result, nil
-}
-
-// validate uses an explicit DFS stack, so finite deep trees do not consume the
-// call stack. Active and completed nodes are separate: DAG sharing is allowed.
-func validate[T any](children []wire.Child[T]) error {
-	type visit struct {
-		tree wire.DeixisNode[T]
-		exit bool
-	}
-	stack := make([]visit, 0, len(children))
-	for _, child := range children {
-		stack = append(stack, visit{tree: child.Tree})
-	}
-	active := make(map[wire.DeixisNode[T]]bool)
-	done := make(map[wire.DeixisNode[T]]bool)
-	for len(stack) != 0 {
-		v := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if _, trusted := v.tree.(*node[T]); trusted {
-			// Already validated; its retained children must remain conforming.
-			continue
-		}
-		if isNil(v.tree) {
-			return fmt.Errorf("%w: nil child", ErrInvalidTree)
-		}
-		if v.exit {
-			delete(active, v.tree)
-			done[v.tree] = true
-			continue
-		}
-		// Non-comparable value implementations remain lawful nodes. A map can
-		// track only comparable, reflexive identities (unlike a value with NaN).
-		identified := reflect.ValueOf(v.tree).Comparable() && v.tree == v.tree
-		if identified {
-			if active[v.tree] {
-				return ErrCycle
-			}
-			if done[v.tree] {
-				continue
+		for j := 0; j < i; j++ {
+			if c.Key.Equal(captured[j].Key) {
+				return nil, errors.New("duplicate byte key")
 			}
 		}
-		parts, err := copyChildren(v.tree.Children())
-		if err != nil {
-			return err
+	}
+	// Validate supplied descendants too. Interface implementations can be values
+	// containing slices; never use those noncomparable values as map keys.
+	active := map[wire.DeixisNode[T]]bool{}
+	complete := map[wire.DeixisNode[T]]bool{}
+	var validate func(wire.DeixisNode[T], int) error
+	validate = func(n wire.DeixisNode[T], depth int) error {
+		if n == nil {
+			return errors.New("nil child")
 		}
-		if identified {
-			active[v.tree] = true
-			stack = append(stack, visit{tree: v.tree, exit: true})
+		value := reflect.ValueOf(n)
+		switch value.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Func, reflect.Chan:
+			if value.IsNil() {
+				return errors.New("nil child")
+			}
 		}
-		for _, part := range parts {
-			stack = append(stack, visit{tree: part.Tree})
+		if depth > 4096 {
+			return errors.New("tree validation depth limit exceeded")
+		}
+		comparable := value.Comparable()
+		if comparable {
+			if active[n] {
+				return errors.New("cyclic tree")
+			}
+			if complete[n] {
+				return nil
+			}
+			active[n] = true
+		}
+		children := n.Children()
+		keys := make(map[string]bool, len(children))
+		for _, c := range children {
+			key := string(c.Key.Bytes())
+			if keys[key] {
+				return errors.New("duplicate byte key")
+			}
+			keys[key] = true
+			if err := validate(c.Node, depth+1); err != nil {
+				return err
+			}
+		}
+		if comparable {
+			delete(active, n)
+			complete[n] = true
+		}
+		return nil
+	}
+	for _, c := range captured {
+		if err := validate(c.Node, 1); err != nil {
+			return nil, err
 		}
 	}
-	return nil
+	return &Node[T]{own: own, children: captured}, nil
 }
-
-func isNil(value any) bool {
-	if value == nil {
-		return true
-	}
-	v := reflect.ValueOf(value)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
-}
-
-func (n *node[T]) Own() T { return n.own }
-
-func (n *node[T]) Children() []wire.Child[T] {
-	result := make([]wire.Child[T], len(n.children))
-	for i, child := range n.children {
-		result[i] = wire.Child[T]{Key: bytes.Clone(child.Key), Tree: child.Tree}
-	}
-	return result
-}
-
-func (n *node[T]) At(path wire.TreePath) (wire.DeixisNode[T], bool) {
-	return Select[T](n, path)
-}
-
-func (n *node[T]) Decompose() (T, []wire.Child[T]) { return n.own, n.Children() }
-
-// Select follows exact child keys. An empty path selects tree itself; a missing
-// edge returns (nil, false). It never manufactures a view or uses own as fallback.
-// The tree must satisfy the full, stable DeixisNode contract.
-func Select[T any](tree wire.DeixisNode[T], path wire.TreePath) (wire.DeixisNode[T], bool) {
-	if isNil(tree) {
-		return nil, false
-	}
-	current := tree
+func (n *Node[T]) Own() T                    { return n.own }
+func (n *Node[T]) Children() []wire.Child[T] { return append([]wire.Child[T]{}, n.children...) }
+func (n *Node[T]) At(path wire.Path) (wire.DeixisNode[T], bool) {
+	var selected wire.DeixisNode[T] = n
 	for _, key := range path {
 		var next wire.DeixisNode[T]
-		if local, ok := current.(*node[T]); ok {
-			next = local.byKey[string(key)]
-		} else {
-			for _, child := range current.Children() {
-				if bytes.Equal(child.Key, key) {
-					next = child.Tree
-					break
-				}
+		for _, c := range selected.Children() {
+			if c.Key.Equal(key) {
+				next = c.Node
+				break
 			}
 		}
-		if isNil(next) {
+		if next == nil {
 			return nil, false
 		}
-		current = next
+		selected = next
 	}
-	return current, true
+	return selected, true
 }
-
-// Send is exactly selection followed by the selected own Wire.Send. Missing
-// selection is ErrMissingPath; a selected primitive's refusal is returned intact.
-// Message and return capability identity are preserved. This operation does not
-// attach receivers, dispatch handlers, or assume ownership of an endpoint.
-func Send(tree wire.WireTree, path wire.TreePath, message wire.Message) error {
-	selected, ok := Select[wire.Wire](tree, path)
+func (n *Node[T]) Decompose() wire.Parts[T] { return wire.Parts[T]{Own: n.own, Children: n.Children()} }
+func Select[T any](n wire.DeixisNode[T], path wire.Path) (wire.DeixisNode[T], bool) {
+	return n.At(path)
+}
+func Route(n wire.DeixisNode[func(wire.Envelope)], e wire.Envelope) bool {
+	target, ok := n.At(e.Destination)
 	if !ok {
-		return ErrMissingPath
+		return false
 	}
-	own := selected.Own()
-	if isNil(own) {
-		return ErrInvalidWire
-	}
-	return own.Send(message)
-}
-
-type addressed struct{ tree wire.WireTree }
-
-// AsAddressed exposes a full tree through the existing bitwire/1 addressed
-// access contract. Each Unicode-scalar string segment maps to its exact UTF-8
-// byte key; malformed UTF-8 is refused before any primitive is called. Empty
-// strings, slashes, dots, and Unicode normalization differences stay literal.
-//
-// Binary tree keys outside the UTF-8 image remain valid tree keys but cannot be
-// selected through this facade. This adapter grants no receiver or lifecycle
-// authority and provides no inverse conversion from an opaque AddressedWire.
-func AsAddressed(tree wire.WireTree) wire.AddressedWire { return addressed{tree: tree} }
-
-func (a addressed) Send(path []string, message wire.Message) error {
-	keys := make(wire.TreePath, len(path))
-	for i, segment := range path {
-		if !utf8.ValidString(segment) {
-			return fmt.Errorf("%w: segment %d is not Unicode-scalar UTF-8", ErrInvalidPath, i)
-		}
-		keys[i] = []byte(segment)
-	}
-	return Send(a.tree, keys, message)
+	target.Own()(e)
+	return true
 }
