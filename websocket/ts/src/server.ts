@@ -4,9 +4,9 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
 import type { WebSocketConnectionHandler, WebSocketHttpServer, WebSocketListenOptions,
-  WebSocketServerOptions, WebSocketWireListener, WebSocketWireServer } from './options.ts';
+  WebSocketServerOptions, WebSocketListener, WebSocketServerBinding } from './options.ts';
 import type { Termination } from '@bitspark/bitwire';
-import { WebSocketWire, wireOptions } from './endpoint.ts';
+import { WebSocketEndpoint, wireOptions } from './endpoint.ts';
 
 const heldServers = new WeakSet<WebSocketHttpServer>();
 function pathname(path: string): string {
@@ -20,7 +20,7 @@ function refuse(socket: Duplex, status: 400 | 403 | 404 | 503): void {
   socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
 }
 export function bindWebSocketServer(server: WebSocketHttpServer, onConnection: WebSocketConnectionHandler,
-  options: WebSocketServerOptions = {}): WebSocketWireServer {
+  options: WebSocketServerOptions = {}): WebSocketServerBinding {
   const limits = wireOptions(options), path = pathname(options.path ?? '/wire');
   const origins = new Set(options.allowedOrigins ?? []);
   for (const origin of origins) {
@@ -31,9 +31,9 @@ export function bindWebSocketServer(server: WebSocketHttpServer, onConnection: W
   if (options.authorize !== undefined && typeof options.authorize !== 'function') throw new TypeError('wire authorization predicate must be a function');
   if (heldServers.has(server)) throw new Error('HTTP server already has a wire binding');
   heldServers.add(server);
-  const sockets = new WebSocketServer({ noServer: true, maxPayload: limits.maxEnvelopeBytes, perMessageDeflate: false,
+  const sockets = new WebSocketServer({ noServer: true, maxPayload: limits.maxMessageBytes, perMessageDeflate: false,
     handleProtocols: (protocols) => protocols.has(WEBSOCKET_PROTOCOL) ? WEBSOCKET_PROTOCOL : false });
-  const wires = new Set<WebSocketWire>();
+  const wires = new Set<WebSocketEndpoint>();
   let resolve!: (end: Termination) => void;
   const closed = new Promise<Termination>((finish) => { resolve = finish; });
   let completion: Promise<void> | undefined;
@@ -64,7 +64,7 @@ export function bindWebSocketServer(server: WebSocketHttpServer, onConnection: W
       }
       if (options.authorize && options.authorize(request) !== true) { refuse(socket, 403); return; }
       sockets.handleUpgrade(request, socket, head, (websocket) => {
-        const wire = new WebSocketWire(websocket, limits); wires.add(wire);
+        const wire = new WebSocketEndpoint(websocket, limits); wires.add(wire);
         void wire.closed.then(() => wires.delete(wire));
         try { void Promise.resolve(onConnection(wire, request)).catch(() => wire.fail('wire connection setup failed')); }
         catch { wire.fail('wire connection setup failed'); }
@@ -80,7 +80,7 @@ function closeHttp(server: WebSocketHttpServer): Promise<void> {
   if (!server.listening) return Promise.resolve();
   return new Promise((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
 }
-export async function listenWebSocket(options: WebSocketListenOptions, onConnection: WebSocketConnectionHandler): Promise<WebSocketWireListener> {
+export async function listenWebSocket(options: WebSocketListenOptions, onConnection: WebSocketConnectionHandler): Promise<WebSocketListener> {
   const port = options.port ?? 0, host = options.host ?? '127.0.0.1';
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new RangeError('wire port must be between 0 and 65535');
   if (typeof host !== 'string' || !host.length) throw new TypeError('wire host must be nonempty');

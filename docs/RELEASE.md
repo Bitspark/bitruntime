@@ -1,9 +1,11 @@
-# bitruntime 0.5.0
+# bitruntime 0.6.0
 
-This breaking release implements bitwire 0.4.0's generic duplex envelope Wire directly in Go and TypeScript. Local pairs and WebSocket carry byte paths, byte IDs and opaque ground ontos values. Complete byte-keyed trees remain a separate facility.
+This breaking release implements bitwire 0.5.0's addressless Wire and Endpoint in Go and TypeScript. Local pairs and WebSocket carry opaque ground ontos values without mandatory IDs, paths or request-response fields.
 
-The active package contains `/core` and `/websocket`. The former RPC engine, dispatch helpers, transport seam, addressed aliases, return-address machinery, protocol selection and interoperability compatibility code are removed. Services define any invocation/error/stream conventions above the shared Wire.
+One addressed layer works over either carrier. bind captures a path into a send-only Wire; under composes prefixes; asAddressed derives access from a complete WireTree. Selection and reconstruction preserve own capabilities without invoking them. Missing paths remain distinct from refused operations.
 
-Admission and receiving ownership are explicit and queues are bounded. Incoming overflow or handler failure terminates endpoints. Close releases owned carrier resources while leaving already dispatched application work and caller-owned HTTP servers under their owners' control. WebSocket uses `bitwire.ontos.v1` and binary `bitwire/envelope/1` only.
+The generic envelope API and decoder are removed. WebSocket negotiates bitwire.ontos.v2 and carries ontos-codec-v1 values. Addressed access uses bitwire/addressed/1 above that raw boundary. Consumers own their service exchange fields.
 
-Validation includes bitwire-owned local-pair cases, independent encoded bytes, Go race tests, TypeScript tests, TLS and origin checks, Go/TypeScript WebSocket exchanges and fresh installed package/module consumers. TypeScript ships as this release's tarball with SHA256SUMS; Go ships through the root version tag.
+Existing local admission, ordering, bounded queues, exclusive detachable receiving and resource-release guarantees remain. Facades retain the underlying endpoint's ownership and lifetime.
+
+Validation covers contract-owned raw and addressed observations, exact byte paths, independent bytes, Go race tests, TLS/origin checks, both Go/TypeScript connection roles and fresh installed consumers. TypeScript ships as the release tarball with SHA256SUMS; Go ships through the root tag.

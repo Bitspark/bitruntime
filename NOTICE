@@ -3,7 +3,7 @@ Copyright 2026 Bitspark and the bitruntime contributors
 
 This product includes software developed at Bitspark (https://github.com/Bitspark), under the Apache License, Version 2.0.
 
-The current implementations follow the public bitwire 0.4.0 contract. Independent envelope bytes and conformance cases are from bitwire at cf0647efa4513b98010398b18d73422024eaf5ac, also Apache-2.0.
+The current implementations follow the bitwire 0.5.0 contract. Independent message bytes and conformance cases are from bitwire's layered contract at 1974ce38c4016b4ba57c415bcbc7e1a5111713dd, also Apache-2.0.
 
 The TypeScript WebSocket host-effect and lifecycle implementation and its local TLS test fixtures derive from the system2 experiment at a866f502933a43d4e24eda7bc01e4aabf38073b8 (Bitspark, 2026), adapted to the shared contract. The fixture private key is public test data only.
 

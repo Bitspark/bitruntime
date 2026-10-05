@@ -1,9 +1,11 @@
 # Working here as an agent
 
-Read [CHARTER.md](CHARTER.md), [the current realization](docs/ENVELOPE-RUNTIME.md), bitwire [decision 0014](https://github.com/Bitspark/bitwire/blob/v0.4.0/docs/decisions/0014-generic-envelope-wire.md) and its [carrier contract](https://github.com/Bitspark/bitwire/blob/v0.4.0/docs/wire/carriers.md).
+Read [CHARTER.md](CHARTER.md), [the current realization](docs/WIRE-RUNTIME.md), and
+bitwire decision 0015 with its wire/carrier contracts at the pinned dependency.
 
-- Implement the shared generic Wire directly. Change missing or incorrect laws in bitwire first.
-- Keep service calls, errors, cancellation and streaming conventions in consumers. Do not introduce generic adapters, RPC profiles, string-path aliases or compatibility implementations.
+- Implement addressless Endpoints in carriers and one reusable addressed layer above them. Wire grants sending; Endpoint adds receive/close ownership; WireTree adds complete structure. Change missing or incorrect laws in bitwire first.
+- Keep service calls, errors, cancellation and streaming conventions in consumers. Do not introduce competing generic interfaces, RPC profiles, string-path aliases or compatibility implementations. The addressed layer connects different abstraction levels under bitwire decision 0015.
+- Preserve deixis's generic identity: sender and receiver trees are equally valid instances. Runtime convenience cannot silently amend its structural laws or bitwire's charter boundaries.
 - Preserve the distinction between opaque routing and complete byte-keyed trees.
 - Test against independent bitwire observations and vectors; never infer expected bytes from this implementation.
 - Use component-first paths with two-letter language directories; see [LAYOUT.md](LAYOUT.md).

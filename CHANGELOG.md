@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Restore addressless Wire sending and Endpoint ownership under bitwire 0.5.0.
+- Implement addressed access once above all carriers, with exact byte paths,
+  captured bindings and prefixes, and complete WireTree selection.
+- Remove the generic envelope API and decoder. WebSocket now uses
+  `bitwire.ontos.v2`; services own their exchange fields and conventions.
+- Validate raw and addressed Go/TypeScript interoperability and inert structure.
+
 ## 0.5.0
 
 - Replace the generic boundary with bitwire 0.4.0's duplex envelope Wire.

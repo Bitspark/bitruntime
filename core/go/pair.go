@@ -1,32 +1,33 @@
-// Package core implements generic local envelope delivery and byte-keyed trees.
+// Package core implements generic local message delivery and byte-keyed trees.
 package core
 
 import (
 	"errors"
+	ontos "github.com/Bitspark/bitwire/ontos/go/core"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	"sync"
 )
 
-type PairOptions struct{ MaxEnvelopeBytes, MaxQueuedBytes, MaxQueuedEnvelopes int }
+type PairOptions struct{ MaxMessageBytes, MaxQueuedBytes, MaxQueuedMessages int }
 
 func NormalizeOptions(o PairOptions) (PairOptions, error) {
-	if o.MaxEnvelopeBytes < 0 || o.MaxQueuedBytes < 0 || o.MaxQueuedEnvelopes < 0 {
+	if o.MaxMessageBytes < 0 || o.MaxQueuedBytes < 0 || o.MaxQueuedMessages < 0 {
 		return o, errors.New("wire limits must be positive")
 	}
-	if o.MaxEnvelopeBytes == 0 {
-		o.MaxEnvelopeBytes = wire.DefaultMaxEnvelopeBytes
+	if o.MaxMessageBytes == 0 {
+		o.MaxMessageBytes = wire.DefaultMaxMessageBytes
 	}
 	if o.MaxQueuedBytes == 0 {
 		o.MaxQueuedBytes = 64 * 1024 * 1024
 	}
-	if o.MaxQueuedEnvelopes == 0 {
-		o.MaxQueuedEnvelopes = 1024
+	if o.MaxQueuedMessages == 0 {
+		o.MaxQueuedMessages = 1024
 	}
 	return o, nil
 }
 
 type queued struct {
-	e    wire.Envelope
+	e    ontos.Value
 	size int
 }
 type pairState struct {
@@ -39,7 +40,7 @@ type PairEndpoint struct {
 	options    PairOptions
 	queue      []queued
 	bytes      int
-	handler    func(wire.Envelope)
+	handler    func(ontos.Value)
 	attachment uint64
 	ended      bool
 	result     wire.Termination
@@ -61,12 +62,8 @@ func NewPair(options PairOptions) (*PairEndpoint, *PairEndpoint, error) {
 	}
 	return s.ends[0], s.ends[1], nil
 }
-func (e *PairEndpoint) Send(envelope wire.Envelope) error {
-	captured, err := wire.CaptureEnvelope(envelope)
-	if err != nil {
-		return err
-	}
-	bytes, err := wire.EncodeEnvelope(captured, e.options.MaxEnvelopeBytes)
+func (e *PairEndpoint) Send(message ontos.Value) error {
+	bytes, err := wire.EncodeMessage(message, e.options.MaxMessageBytes)
 	if err != nil {
 		return err
 	}
@@ -77,16 +74,16 @@ func (e *PairEndpoint) Send(envelope wire.Envelope) error {
 	if e.ended || peer.ended {
 		return errors.New("wire is closed")
 	}
-	if len(bytes) > peer.options.MaxEnvelopeBytes || len(peer.queue) >= peer.options.MaxQueuedEnvelopes || len(bytes) > peer.options.MaxQueuedBytes-peer.bytes {
+	if len(bytes) > peer.options.MaxMessageBytes || len(peer.queue) >= peer.options.MaxQueuedMessages || len(bytes) > peer.options.MaxQueuedBytes-peer.bytes {
 		s.finish(wire.Termination{Kind: "failed", Message: "wire input limit exceeded"})
 		return errors.New("wire input limit exceeded")
 	}
-	peer.queue = append(peer.queue, queued{captured, len(bytes)})
+	peer.queue = append(peer.queue, queued{message, len(bytes)})
 	peer.bytes += len(bytes)
 	peer.signal()
 	return nil
 }
-func (e *PairEndpoint) Receive(handler func(wire.Envelope)) (func(), error) {
+func (e *PairEndpoint) Receive(handler func(ontos.Value)) (func(), error) {
 	if handler == nil {
 		return nil, errors.New("wire handler must be nonnil")
 	}
@@ -178,4 +175,4 @@ func (e *PairEndpoint) dispatch() {
 	}
 }
 
-var _ wire.Wire = (*PairEndpoint)(nil)
+var _ wire.Endpoint = (*PairEndpoint)(nil)
