@@ -3,7 +3,7 @@
 Read [CHARTER.md](CHARTER.md), [the current realization](docs/WIRE-RUNTIME.md), and
 bitwire decision 0015 with its wire/carrier contracts at the pinned dependency.
 
-- Implement addressless Endpoints in carriers and one reusable addressed layer above them. Wire grants sending; Endpoint adds receive/close ownership; WireTree adds complete structure. Change missing or incorrect laws in bitwire first.
+- Implement addressless Endpoints in carriers and one reusable addressed layer above them. Wire grants sending; Endpoint adds receive/close ownership; WireNode adds complete structure. Change missing or incorrect laws in bitwire first.
 - Keep service calls, errors, cancellation and streaming conventions in consumers. Do not introduce competing generic interfaces, RPC profiles, string-path aliases or compatibility implementations. The addressed layer connects different abstraction levels under bitwire decision 0015.
 - Preserve deixis's generic identity: sender and receiver trees are equally valid instances. Runtime convenience cannot silently amend its structural laws or bitwire's charter boundaries.
 - Preserve the distinction between opaque routing and complete byte-keyed trees.

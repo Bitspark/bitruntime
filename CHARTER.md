@@ -1,6 +1,6 @@
 # Charter
 
-bitruntime implements the [bitwire layered contract](https://github.com/Bitspark/bitwire/blob/v0.5.0/docs/wire/contract.md). Carriers provide addressless Endpoints; one carrier-independent layer adds AddressedWire access. Wire grants sending, Endpoint adds receive and close ownership, and WireTree supplies complete structural access. These are distinct capabilities, not compatibility spellings.
+bitruntime implements the [bitwire layered contract](https://github.com/Bitspark/bitwire/blob/v0.5.0/docs/wire/contract.md). Carriers provide addressless Endpoints; one carrier-independent layer adds AddressedWire access. Wire grants sending, Endpoint adds receive and close ownership, and WireNode supplies complete structural access. These are distinct capabilities, not compatibility spellings.
 
 bitwire owns interface laws, canonical raw/addressed formats and independent conformance expectations. deixis owns complete-tree selection and reconstruction laws for any opaque own type. bitruntime owns concrete concurrency, queues, resource bounds, carrier setup and packaging. Consumers own services, authorization and message conventions. An implementation convenience may not silently amend those upstream boundaries.
 

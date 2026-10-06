@@ -30,7 +30,15 @@ connection root. under and bind expose sending only; they do not strip incoming
 prefixes or rewrite source fields in opaque messages. Consumers define reply
 paths relative to that same stable root, as system2/service/2 does.
 
-`asAddressed(tree)` derives addressed access from a complete WireTree by exact
+The send-only prefix helper deliberately does not restore the old symmetric
+origin operation. It confines destination paths under its prefix when the supplied
+addressed sender obeys that contract; it does not prove comprehensive authority
+attenuation. It captures the sender and path, not a remotely selected participant.
+Shared exchange semantics are deferred under bitwire decision 0015's explicit
+R3.1-R3.7 obligations and trigger. No cancellation or relay-composition guarantee
+is inferred from prefix concatenation.
+
+`asAddressed(tree)` derives addressed access from a complete WireNode by exact
 selection followed by one own-value send. It rejects a missing path with
 MissingPathError / ErrMissingPath; refusal by a selected sender propagates.
 `route(tree,path,message)` selects and invokes a receiver handler, returning false
@@ -57,6 +65,24 @@ allocation protocol is introduced.
   data fails only after the addressed layer is attached, and close releases the
   same owned socket/server resources as raw use.
 
+Research 0006 R25b is tracked against the capabilities actually supplied here.
+The node-boundary batteries exercise the published deixis 0.6.0 byte-keyed cores
+and the independently declared bitwire Atom-keyed interfaces in TypeScript and
+Go. Hand-written expected paths cover binary and empty keys, separator bytes,
+every path cut, capture of caller/returned key buffers, complete reconstruction
+and live-slot aliasing. Mutable execution comparisons use separate corresponding
+fixtures. Remote unknown paths are admitted locally, then report structural
+absence only at the receiver; they neither fall back nor poison valid traffic.
+
+These are the two implemented runtime languages. The other bitwire presentations
+declare interfaces and check package consumption; no concrete tree implementation
+or cross-package runtime conformance is claimed for them. Their first concrete
+implementations must run the same structural observations. Multi-hop relays,
+mount-crossing exchanges, cancellation and exported live wires remain absent:
+their R25b lifecycle/relay families are required when their separately specified
+protocols are introduced, under decision 0015's triggers. Existing endpoint
+queue saturation, close and disconnect checks are not evidence for a relay chain.
+
 ## Delivery boundary
 
 Candidate bitruntime 0.6.0 requires the actual published bitwire 0.5.0, with no
@@ -64,10 +90,19 @@ local module replacement or checkout dependency in delivery. Both runtime
 languages, package consumers and interop must pass before landing/release.
 system2 then adopts the same addressless endpoints and addressed facade while
 owning its service exchange fields. Existing release tags remain historical
-evidence, not current conformance. The shared build service is stopped after its
-5 October allowance; documented fallback checks retain every required gate.
+evidence, not current conformance. Shared build service admission and qualification
+are checked before submission; while this repository's full gate is unqualified,
+the documented local/hosted fallback retains every required check.
 
-At the candidate source review, TypeScript checking and all 18 runtime tests,
+The 6 October check exposed an intermittent forced-close race in Go. The
+WebSocket library's closing handshake can acquire its own read context, so
+cancelling the endpoint context alone cannot enforce CloseTimeout. Dial now
+retains the acquired upgraded response stream, and Accept retains its hijacked
+socket; the deadline closes that endpoint-owned stream directly. Caller-owned
+HTTP transports and servers remain open. The unchanged closure contract requires
+this fix. Both server-side and repeated client-side silent-peer tests pass.
+
+At the candidate source review, TypeScript checking and all 21 runtime tests,
 Go tests and vet, both raw/addressed Go/TypeScript connection roles, and all 76
 system2 tests pass against local candidate packages. This is development evidence,
 not a released dependency check. Public lock files and release validation remain

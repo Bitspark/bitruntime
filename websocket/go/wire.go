@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	"io"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ type queuedMessage struct {
 type Endpoint struct {
 	mu         sync.Mutex
 	conn       *carrier.Conn
+	stream     io.Closer
 	limits     core.PairOptions
 	closeAfter time.Duration
 	ctx        context.Context
@@ -42,9 +44,9 @@ type Endpoint struct {
 	outCount   int
 }
 
-func newEndpoint(conn *carrier.Conn, options normalizedOptions) *Endpoint {
+func newEndpoint(conn *carrier.Conn, stream io.Closer, options normalizedOptions) *Endpoint {
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Endpoint{conn: conn, limits: options.PairOptions, closeAfter: options.CloseTimeout,
+	e := &Endpoint{conn: conn, stream: stream, limits: options.PairOptions, closeAfter: options.CloseTimeout,
 		ctx: ctx, cancel: cancel, stop: make(chan struct{}), closed: make(chan struct{}),
 		readWake: make(chan struct{}, 1), writeWake: make(chan struct{}, 1)}
 	conn.SetReadLimit(int64(e.limits.MaxMessageBytes))
@@ -130,10 +132,10 @@ func (e *Endpoint) end(result wire.Termination) {
 		if result.Kind == "closed" {
 			forced := make(chan struct{})
 			timer := time.AfterFunc(e.closeAfter, func() {
-				// CloseNow alone waits for an already-started Close handshake.
-				// Cancel the active read/write context to interrupt that handshake.
+				// CloseNow waits for an already-started handshake. That handshake
+				// can own its own read context, so cancelling e.ctx is insufficient.
+				_ = e.stream.Close()
 				e.cancel()
-				_ = e.conn.CloseNow()
 				close(forced)
 			})
 			_ = e.conn.Close(carrier.StatusNormalClosure, "")

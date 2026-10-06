@@ -208,3 +208,37 @@ func TestRefusedSendAndForcedClose(t *testing.T) {
 	default:
 	}
 }
+
+func TestDialForceCloseWithoutPeerRead(t *testing.T) {
+	peers := make(chan *carrier.Conn, 1)
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := carrier.Accept(w, r, &carrier.AcceptOptions{Subprotocols: []string{wire.WebSocketProtocol}})
+		if err != nil {
+			return
+		}
+		peers <- conn
+	}))
+	defer h.Close()
+	// Repeated immediate closure exercises both the initial-read and handshake-
+	// reader schedules. None of these raw peers reads or acknowledges close.
+	for i := 0; i < 10; i++ {
+		client, err := ws.Dial(context.Background(), "ws"+strings.TrimPrefix(h.URL, "http"), ws.Options{CloseTimeout: 20 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		peer := take(t, peers)
+		started := time.Now()
+		finished := make(chan struct{})
+		go func() { client.Close(); close(finished) }()
+		select {
+		case <-finished:
+		case <-time.After(time.Second):
+			peer.CloseNow()
+			t.Fatal("force-close missed its deadline")
+		}
+		if elapsed := time.Since(started); elapsed < 20*time.Millisecond {
+			t.Fatal("graceful interval skipped", elapsed)
+		}
+		peer.CloseNow()
+	}
+}

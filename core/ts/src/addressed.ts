@@ -1,6 +1,6 @@
 import { capturePath, packAddressed, unpackAddressed,
   type Endpoint, type AddressedEndpoint, type Wire, type AddressedWire,
-  type WireTree, type Path, type Value } from '@bitspark/bitwire';
+  type WireNode, type Path, type Value } from '@bitspark/bitwire';
 
 // Inert facade: receiving is attached only by receive(), with the raw owner's lifetime.
 export function addressed(endpoint: Endpoint): AddressedEndpoint {
@@ -29,7 +29,7 @@ export function under(wire: AddressedWire, prefix: Path): AddressedWire {
 export class MissingPathError extends Error {
   constructor() { super('wire tree path is absent'); this.name = 'MissingPathError'; }
 }
-export function asAddressed(tree: WireTree): AddressedWire {
+export function asAddressed(tree: WireNode): AddressedWire {
   return Object.freeze({async send(path: Path, message: Value): Promise<void> {
     const selected = tree.at(capturePath(path));
     if (!selected) throw new MissingPathError();

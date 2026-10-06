@@ -1,8 +1,11 @@
 package websocket
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -70,6 +73,11 @@ func Dial(ctx context.Context, address string, options Options) (*Endpoint, erro
 		client = &http.Client{}
 	}
 	copyClient := *client
+	transport := &captureTransport{base: copyClient.Transport}
+	if transport.base == nil {
+		transport.base = http.DefaultTransport
+	}
+	copyClient.Transport = transport
 	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	conn, _, err := carrier.Dial(ctx, address, &carrier.DialOptions{HTTPClient: &copyClient,
 		HTTPHeader: o.Header, Subprotocols: []string{wire.WebSocketProtocol}, CompressionMode: carrier.CompressionDisabled})
@@ -80,7 +88,7 @@ func Dial(ctx context.Context, address string, options Options) (*Endpoint, erro
 		_ = conn.CloseNow()
 		return nil, errors.New("wire subprotocol negotiation failed")
 	}
-	return newEndpoint(conn, o), nil
+	return newEndpoint(conn, transport.stream, o), nil
 }
 
 // Accept establishes one endpoint; the caller remains responsible for its HTTP server.
@@ -108,12 +116,42 @@ func Accept(w http.ResponseWriter, r *http.Request, options Options) (*Endpoint,
 		http.Error(w, "wire connection refused", http.StatusForbidden)
 		return nil, errors.New("wire connection refused")
 	}
-	conn, err := carrier.Accept(w, r, &carrier.AcceptOptions{Subprotocols: []string{wire.WebSocketProtocol},
+	writer := &captureHijacker{ResponseWriter: w}
+	conn, err := carrier.Accept(writer, r, &carrier.AcceptOptions{Subprotocols: []string{wire.WebSocketProtocol},
 		OriginPatterns: o.OriginPatterns, CompressionMode: carrier.CompressionDisabled})
 	if err != nil {
 		return nil, err
 	}
-	return newEndpoint(conn, o), nil
+	return newEndpoint(conn, writer.stream, o), nil
+}
+
+// Retain the stream acquired by this endpoint, so its force-close deadline can
+// interrupt a handshake even after the library has taken over the read context.
+// The caller's HTTP client, transport and server remain caller-owned.
+type captureTransport struct {
+	base   http.RoundTripper
+	stream io.Closer
+}
+
+func (t *captureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(r)
+	if err == nil && response.StatusCode == http.StatusSwitchingProtocols {
+		t.stream = response.Body
+	}
+	return response, err
+}
+
+type captureHijacker struct {
+	http.ResponseWriter
+	stream net.Conn
+}
+
+func (w *captureHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	if err == nil {
+		w.stream = conn
+	}
+	return conn, rw, err
 }
 
 func authorized(check func(*http.Request) bool, r *http.Request) (ok bool) {

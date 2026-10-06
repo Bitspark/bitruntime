@@ -65,9 +65,9 @@ func (b *prefixWire) Send(path wire.Path, message ontos.Value) error {
 
 var ErrMissingPath = errors.New("wire tree path is absent")
 
-type treeWire struct{ tree wire.WireTree }
+type treeWire struct{ tree wire.WireNode }
 
-func AsAddressed(tree wire.WireTree) wire.AddressedWire { return &treeWire{tree} }
+func AsAddressed(tree wire.WireNode) wire.AddressedWire { return &treeWire{tree} }
 func (t *treeWire) Send(path wire.Path, message ontos.Value) error {
 	node, ok := t.tree.At(append(wire.Path{}, path...))
 	if !ok {

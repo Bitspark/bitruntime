@@ -2,7 +2,7 @@
 
 Go and TypeScript implementations of [bitwire 0.5.0](https://github.com/Bitspark/bitwire/tree/v0.5.0): addressless endpoints, addressed access, complete byte-keyed trees, local pairs and WebSocket carriers.
 
-Wire grants sending ground ontos values. Endpoint adds one detachable receive owner, termination and closure. AddressedWire adds a separate path parameter; an AddressedEndpoint presents that layer over an existing endpoint. WireTree is a complete deixis tree whose own values are send capabilities.
+Wire grants sending ground ontos values. Endpoint adds one detachable receive owner, termination and closure. AddressedWire adds a separate path parameter; an AddressedEndpoint presents that layer over an existing endpoint. WireNode is a complete deixis tree whose own values are send capabilities.
 
 ## TypeScript
 
@@ -25,7 +25,7 @@ await left.close();
 
 A raw endpoint can send an atom directly. The addressed facade works on the same endpoints, retains their lifetime, and attaches no receiver until requested. Raw and addressed receiving share one ownership slot.
 
-`/core` exports `pair`, `addressed`, `bind`, `under`, `asAddressed`, `compose`, `select` and `route`. Binding captures a path and returns send authority only; `under` captures a prefix. `asAddressed` selects a WireTree node and invokes its own sender once. MissingPathError differs from refusal by that sender. `route(tree,path,message)` does the analogous explicit selection for receiver trees. Structural construction and selection invoke no own capabilities.
+`/core` exports `pair`, `addressed`, `bind`, `under`, `asAddressed`, `compose`, `select` and `route`. Binding captures a path and returns send authority only; `under` captures a prefix. `asAddressed` selects a WireNode node and invokes its own sender once. MissingPathError differs from refusal by that sender. `route(tree,path,message)` does the analogous explicit selection for receiver trees. Structural construction and selection invoke no own capabilities.
 
 `/websocket` exports `connectWebSocket`, `listenWebSocket` and `bindWebSocketServer`. A binding owns accepted endpoints and leaves a supplied HTTP/HTTPS server open. A convenience listener owns its HTTP server too. WebSocket negotiates `bitwire.ontos.v2` and carries whole ontos-codec-v1 values. The optional addressed layer encodes `bitwire/addressed/1` as an ordinary value above any carrier.
 

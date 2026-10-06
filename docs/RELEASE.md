@@ -2,7 +2,7 @@
 
 This breaking release implements bitwire 0.5.0's addressless Wire and Endpoint in Go and TypeScript. Local pairs and WebSocket carry opaque ground ontos values without mandatory IDs, paths or request-response fields.
 
-One addressed layer works over either carrier. bind captures a path into a send-only Wire; under composes prefixes; asAddressed derives access from a complete WireTree. Selection and reconstruction preserve own capabilities without invoking them. Missing paths remain distinct from refused operations.
+One addressed layer works over either carrier. bind captures a path into a send-only Wire; under composes prefixes; asAddressed derives access from a complete WireNode. Selection and reconstruction preserve own capabilities without invoking them. Missing paths remain distinct from refused operations.
 
 The generic envelope API and decoder are removed. WebSocket negotiates bitwire.ontos.v2 and carries ontos-codec-v1 values. Addressed access uses bitwire/addressed/1 above that raw boundary. Consumers own their service exchange fields.
 
