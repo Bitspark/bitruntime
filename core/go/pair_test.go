@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-func envelope() wire.Envelope {
-	return wire.Envelope{Source: wire.Path{}, Destination: wire.Path{ontos.NewAtom([]byte{0, 255})}, ID: ontos.NewAtom(nil), Payload: ontos.NewAtom([]byte{255, 0})}
+func message() ontos.Value {
+	return ontos.NewAtom([]byte{255, 0})
 }
 func take[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
@@ -28,29 +28,28 @@ func TestPairOwnershipAndAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	e := envelope()
+	e := message()
 	if err = a.Send(e); err != nil {
 		t.Fatal(err)
 	}
-	e.Destination[0] = ontos.NewAtom([]byte{1})
-	if err = a.Send(envelope()); err != nil {
+	if err = a.Send(message()); err != nil {
 		t.Fatal(err)
 	}
-	got := make(chan wire.Envelope, 4)
-	detach, err := b.Receive(func(e wire.Envelope) { got <- e })
+	got := make(chan ontos.Value, 4)
+	detach, err := b.Receive(func(e ontos.Value) { got <- e })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = b.Receive(func(wire.Envelope) {}); err == nil {
+	if _, err = b.Receive(func(ontos.Value) {}); err == nil {
 		t.Fatal("second receiver accepted")
 	}
 	first, second := take(t, got), take(t, got)
-	if !first.Destination[0].Equal(envelope().Destination[0]) || !first.ID.Equal(second.ID) {
-		t.Fatal("snapshot or duplicate admission lost")
+	if !first.Equal(message()) || !first.Equal(second) {
+		t.Fatal("opaque value or repeated admission lost")
 	}
 	detach()
 	detach()
-	if err = a.Send(envelope()); err != nil {
+	if err = a.Send(message()); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -58,15 +57,15 @@ func TestPairOwnershipAndAdmission(t *testing.T) {
 		t.Fatal("detached handler invoked")
 	default:
 	}
-	_, err = b.Receive(func(e wire.Envelope) { got <- e })
+	_, err = b.Receive(func(e ontos.Value) { got <- e })
 	if err != nil {
 		t.Fatal(err)
 	}
 	detach()
 	take(t, got)
-	replies := make(chan wire.Envelope, 1)
-	a.Receive(func(e wire.Envelope) { replies <- e })
-	if err = b.Send(envelope()); err != nil {
+	replies := make(chan ontos.Value, 1)
+	a.Receive(func(e ontos.Value) { replies <- e })
+	if err = b.Send(message()); err != nil {
 		t.Fatal(err)
 	}
 	take(t, replies)
@@ -75,38 +74,37 @@ func TestPairOwnershipAndAdmission(t *testing.T) {
 	if b.Termination().Kind != "closed" {
 		t.Fatal(b.Termination())
 	}
-	if err = b.Send(envelope()); err == nil {
+	if err = b.Send(message()); err == nil {
 		t.Fatal("send after close")
 	}
 }
 func TestPairBoundsAndExecution(t *testing.T) {
-	a, b, _ := core.NewPair(core.PairOptions{MaxQueuedEnvelopes: 1})
-	a.Send(envelope())
-	if err := a.Send(envelope()); err == nil {
+	a, b, _ := core.NewPair(core.PairOptions{MaxQueuedMessages: 1})
+	a.Send(message())
+	if err := a.Send(message()); err == nil {
 		t.Fatal("overflow admitted")
 	}
 	take(t, b.Closed())
 	if b.Termination().Kind != "failed" {
 		t.Fatal(b.Termination())
 	}
-	c, d, _ := core.NewPair(core.PairOptions{MaxEnvelopeBytes: 80})
+	c, d, _ := core.NewPair(core.PairOptions{MaxMessageBytes: 80})
 	defer c.Close()
-	bad := envelope()
-	bad.Payload = ontos.NewAtom(make([]byte, 100))
+	bad := ontos.NewAtom(make([]byte, 100))
 	if err := c.Send(bad); err == nil {
 		t.Fatal("oversize admitted")
 	}
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	d.Receive(func(wire.Envelope) { close(entered); <-release; close(done) })
-	c.Send(envelope())
+	d.Receive(func(ontos.Value) { close(entered); <-release; close(done) })
+	c.Send(message())
 	take(t, entered)
 	c.Close()
 	take(t, d.Closed())
 	close(release)
 	take(t, done)
 	e, f, _ := core.NewPair(core.PairOptions{})
-	f.Receive(func(wire.Envelope) { panic("provider") })
-	e.Send(envelope())
+	f.Receive(func(ontos.Value) { panic("provider") })
+	e.Send(message())
 	take(t, e.Closed())
 	if f.Termination().Kind != "failed" {
 		t.Fatal(f.Termination())

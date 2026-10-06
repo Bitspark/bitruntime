@@ -1,4 +1,4 @@
-// A generic envelope peer used only for cross-language and fresh-consumer checks.
+// Raw and addressed peers for cross-language and fresh-consumer observations.
 package main
 
 import (
@@ -14,24 +14,42 @@ import (
 	"time"
 )
 
-func sample() wire.Envelope {
-	return wire.Envelope{Source: wire.Path{ontos.NewAtom([]byte{0, 255})}, Destination: wire.Path{ontos.NewAtom(nil), ontos.NewAtom([]byte("a/b"))}, ID: ontos.NewAtom(nil), Payload: ontos.NewTuple(ontos.NewAtom([]byte("unknown.embedding")), ontos.NewAtom([]byte{255, 0, 128}), ontos.NewTuple())}
+func sample() ontos.Value {
+	return ontos.NewTuple(ontos.NewAtom([]byte("unknown.embedding")), ontos.NewAtom([]byte{255, 0, 128}), ontos.NewTuple())
 }
-func echo(e *ws.Endpoint, _ *http.Request) {
-	e.Receive(func(request wire.Envelope) {
-		if request.Correlation != nil {
-			return
-		}
-		id := request.ID
-		if err := e.Send(wire.Envelope{Source: request.Destination, Destination: request.Source, ID: ontos.NewAtom([]byte{255}), Correlation: &id, Payload: request.Payload}); err != nil {
-			panic(err)
-		}
-	})
-	if err := e.Send(sample()); err != nil {
+func path() wire.Path {
+	return wire.Path{ontos.NewAtom(nil), ontos.NewAtom([]byte{97, 47, 98}), ontos.NewAtom([]byte{255})}
+}
+func send(e wire.Endpoint, mode string, p wire.Path, v ontos.Value) error {
+	if mode == "addressed" {
+		return core.Addressed(e).Send(p, v)
+	}
+	return e.Send(v)
+}
+func receive(e wire.Endpoint, mode string, f func(wire.Path, ontos.Value)) {
+	var err error
+	if mode == "addressed" {
+		_, err = core.Addressed(e).Receive(f)
+	} else {
+		_, err = e.Receive(func(v ontos.Value) { f(nil, v) })
+	}
+	if err != nil {
 		panic(err)
 	}
 }
-func client(address string) {
+func echo(mode string) func(*ws.Endpoint, *http.Request) {
+	return func(e *ws.Endpoint, _ *http.Request) {
+		receive(e, mode, func(p wire.Path, v ontos.Value) {
+			if err := send(e, mode, p, v); err != nil {
+				panic(err)
+			}
+		})
+		if err := send(e, mode, nil, ontos.NewAtom([]byte{255})); err != nil {
+			panic(err)
+		}
+	}
+}
+func client(address, mode string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	e, err := ws.Dial(ctx, address, ws.Options{})
@@ -39,54 +57,86 @@ func client(address string) {
 		panic(err)
 	}
 	defer e.Close()
-	got := make(chan wire.Envelope, 4)
-	e.Receive(func(v wire.Envelope) { got <- v })
-	request := sample()
-	if err = e.Send(request); err != nil {
+	type observation struct {
+		p wire.Path
+		v ontos.Value
+	}
+	got := make(chan observation, 4)
+	receive(e, mode, func(p wire.Path, v ontos.Value) { got <- observation{p, v} })
+	if err = send(e, mode, path(), sample()); err != nil {
 		panic(err)
 	}
-	for {
+	greeting := false
+	response := false
+	for !greeting || !response {
 		select {
-		case response := <-got:
-			if response.Correlation == nil {
+		case x := <-got:
+			if x.v.Equal(ontos.NewAtom([]byte{255})) {
+				if len(x.p) != 0 {
+					panic("greeting path changed")
+				}
+				greeting = true
 				continue
 			}
-			if !response.Correlation.Equal(request.ID) || !response.Payload.Equal(request.Payload) || len(response.Source) != 2 || !response.Source[0].Equal(request.Destination[0]) || !response.Source[1].Equal(request.Destination[1]) {
-				panic("cross-language envelope changed")
+			if !x.v.Equal(sample()) {
+				panic("opaque message changed")
 			}
-			fmt.Println("ok")
-			return
+			if mode == "addressed" {
+				if len(x.p) != len(path()) {
+					panic("path length changed")
+				}
+				for i, k := range path() {
+					if !x.p[i].Equal(k) {
+						panic("path bytes changed")
+					}
+				}
+			}
+			response = true
 		case <-ctx.Done():
 			panic("peer observation timed out")
 		}
 	}
+	fmt.Println("ok")
 }
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "client" {
-		client(os.Args[2])
+		client(os.Args[2], os.Args[3])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "smoke" {
-		a, b, err := core.NewPair(core.PairOptions{})
-		if err != nil {
-			panic(err)
+		for _, mode := range []string{"raw", "addressed"} {
+			a, b, err := core.NewPair(core.PairOptions{})
+			if err != nil {
+				panic(err)
+			}
+			got := make(chan ontos.Value, 1)
+			receive(b, mode, func(_ wire.Path, v ontos.Value) { got <- v })
+			if err = send(a, mode, path(), sample()); err != nil {
+				panic(err)
+			}
+			select {
+			case v := <-got:
+				if !v.Equal(sample()) {
+					panic("local message changed")
+				}
+			case <-time.After(10 * time.Second):
+				panic("local observation timed out")
+			}
+			a.Close()
+			s, err := ws.Listen("", ws.Options{}, echo(mode))
+			if err != nil {
+				panic(err)
+			}
+			client(s.URL(), mode)
+			s.Close()
 		}
-		got := make(chan wire.Envelope, 1)
-		b.Receive(func(e wire.Envelope) { got <- e })
-		a.Send(sample())
-		if !(<-got).Payload.Equal(sample().Payload) {
-			panic("local pair changed payload")
-		}
-		a.Close()
-		s, err := ws.Listen("", ws.Options{}, echo)
-		if err != nil {
-			panic(err)
-		}
-		defer s.Close()
-		client(s.URL())
 		return
 	}
-	s, err := ws.Listen("", ws.Options{}, echo)
+	mode := "raw"
+	if len(os.Args) > 1 {
+		mode = os.Args[1]
+	}
+	s, err := ws.Listen("", ws.Options{}, echo(mode))
 	if err != nil {
 		panic(err)
 	}

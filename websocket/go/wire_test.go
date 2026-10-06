@@ -45,10 +45,10 @@ func TestDuplexAndReleasedOwnership(t *testing.T) {
 	}
 	defer a.Close()
 	b := take(t, peers)
-	got := make(chan wire.Envelope, 4)
-	b.Receive(func(e wire.Envelope) { got <- e })
-	a.Receive(func(e wire.Envelope) { got <- e })
-	e := wire.Envelope{Source: wire.Path{ontos.NewAtom(nil)}, Destination: wire.Path{ontos.NewAtom([]byte{255, 0, 47})}, ID: ontos.NewAtom(nil), Payload: ontos.NewTuple(ontos.NewAtom([]byte{1, 2}))}
+	got := make(chan ontos.Value, 4)
+	b.Receive(func(e ontos.Value) { got <- e })
+	a.Receive(func(e ontos.Value) { got <- e })
+	e := ontos.NewTuple(ontos.NewAtom([]byte{1, 2}))
 	for range 2 {
 		if err = a.Send(e); err != nil {
 			t.Fatal(err)
@@ -56,8 +56,8 @@ func TestDuplexAndReleasedOwnership(t *testing.T) {
 	}
 	first := take(t, got)
 	second := take(t, got)
-	if !first.ID.Equal(second.ID) || !first.Destination[0].Equal(e.Destination[0]) {
-		t.Fatal("opaque bytes or duplicate IDs changed")
+	if !first.Equal(second) || !first.Equal(e) {
+		t.Fatal("opaque bytes or repeated admissions changed")
 	}
 	if err = b.Send(e); err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestIndependentBytesAndFailures(t *testing.T) {
 		hex   string
 		valid bool
 	}{
-		{"independent empty vector", carrier.MessageBinary, "01060012626974776972652f656e76656c6f70652f3101000100000001000000", true},
+		{"independent empty vector", carrier.MessageBinary, "0000", true},
 		{"truncated", carrier.MessageBinary, "0106", false}, {"text", carrier.MessageText, "6869", false},
 	} {
 		t.Run(sample.name, func(t *testing.T) {
@@ -94,15 +94,15 @@ func TestIndependentBytesAndFailures(t *testing.T) {
 			}
 			defer raw.CloseNow()
 			peer := take(t, peers)
-			got := make(chan wire.Envelope, 1)
-			peer.Receive(func(e wire.Envelope) { got <- e })
+			got := make(chan ontos.Value, 1)
+			peer.Receive(func(e ontos.Value) { got <- e })
 			bytes, _ := hex.DecodeString(sample.hex)
 			if err = raw.Write(context.Background(), sample.kind, bytes); err != nil {
 				t.Fatal(err)
 			}
 			if sample.valid {
 				e := take(t, got)
-				if len(e.Source) != 0 || len(e.Destination) != 0 || len(e.ID.Bytes()) != 0 {
+				if !e.Equal(ontos.NewAtom(nil)) {
 					t.Fatal(e)
 				}
 			} else {
@@ -152,14 +152,14 @@ func TestNegotiationOriginAuthorizationAndTLS(t *testing.T) {
 }
 func TestDetachedOverflowAndDispatchedWork(t *testing.T) {
 	peers := make(chan *ws.Endpoint, 1)
-	_, _, url := start(t, ws.Options{PairOptions: core.PairOptions{MaxQueuedEnvelopes: 1}}, func(e *ws.Endpoint, _ *http.Request) { peers <- e })
+	_, _, url := start(t, ws.Options{PairOptions: core.PairOptions{MaxQueuedMessages: 1}}, func(e *ws.Endpoint, _ *http.Request) { peers <- e })
 	a, err := ws.Dial(context.Background(), url, ws.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
 	b := take(t, peers)
-	e := wire.Envelope{ID: ontos.NewAtom(nil), Payload: ontos.NewAtom(nil)}
+	e := ontos.NewAtom(nil)
 	a.Send(e)
 	a.Send(e)
 	take(t, b.Closed())
@@ -168,7 +168,7 @@ func TestDetachedOverflowAndDispatchedWork(t *testing.T) {
 	}
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	_, _, url = start(t, ws.Options{}, func(e *ws.Endpoint, _ *http.Request) {
-		e.Receive(func(wire.Envelope) { close(entered); <-release; close(done) })
+		e.Receive(func(ontos.Value) { close(entered); <-release; close(done) })
 	})
 	c, err := ws.Dial(context.Background(), url, ws.Options{})
 	if err != nil {
@@ -199,12 +199,46 @@ func TestRefusedSendAndForcedClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	if err = a.Send(wire.Envelope{Payload: ontos.NewAtom(nil)}); err == nil {
+	if err = a.Send(ontos.NewAtom(nil)); err == nil {
 		t.Fatal("output budget was ignored")
 	}
 	select {
 	case <-a.Closed():
 		t.Fatal("outgoing refusal closed the wire")
 	default:
+	}
+}
+
+func TestDialForceCloseWithoutPeerRead(t *testing.T) {
+	peers := make(chan *carrier.Conn, 1)
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := carrier.Accept(w, r, &carrier.AcceptOptions{Subprotocols: []string{wire.WebSocketProtocol}})
+		if err != nil {
+			return
+		}
+		peers <- conn
+	}))
+	defer h.Close()
+	// Repeated immediate closure exercises both the initial-read and handshake-
+	// reader schedules. None of these raw peers reads or acknowledges close.
+	for i := 0; i < 10; i++ {
+		client, err := ws.Dial(context.Background(), "ws"+strings.TrimPrefix(h.URL, "http"), ws.Options{CloseTimeout: 20 * time.Millisecond})
+		if err != nil {
+			t.Fatal(err)
+		}
+		peer := take(t, peers)
+		started := time.Now()
+		finished := make(chan struct{})
+		go func() { client.Close(); close(finished) }()
+		select {
+		case <-finished:
+		case <-time.After(time.Second):
+			peer.CloseNow()
+			t.Fatal("force-close missed its deadline")
+		}
+		if elapsed := time.Since(started); elapsed < 20*time.Millisecond {
+			t.Fatal("graceful interval skipped", elapsed)
+		}
+		peer.CloseNow()
 	}
 }

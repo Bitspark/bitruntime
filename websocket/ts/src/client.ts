@@ -1,10 +1,10 @@
 import { WEBSOCKET_PROTOCOL } from '@bitspark/bitwire';
 import WebSocket from 'ws';
-import type { Wire } from '@bitspark/bitwire';
+import type { Endpoint } from '@bitspark/bitwire';
 import type { WebSocketConnectOptions } from './options.ts';
-import { WebSocketWire, wireOptions, timerLimit } from './endpoint.ts';
+import { WebSocketEndpoint, wireOptions, timerLimit } from './endpoint.ts';
 
-export async function connectWebSocket(url: string, options: WebSocketConnectOptions = {}): Promise<Wire> {
+export async function connectWebSocket(url: string, options: WebSocketConnectOptions = {}): Promise<Endpoint> {
   const address = new URL(url), limits = wireOptions(options);
   if (!['ws:', 'wss:'].includes(address.protocol) || address.username || address.password || address.hash) {
     throw new TypeError('wire URL must be ws: or wss: without credentials or fragment');
@@ -12,7 +12,7 @@ export async function connectWebSocket(url: string, options: WebSocketConnectOpt
   const handshakeTimeout = timerLimit(options.handshakeTimeoutMs ?? 10000);
   if (options.signal?.aborted) throw new Error('wire connection aborted');
   const socket = new WebSocket(address, WEBSOCKET_PROTOCOL, {
-    maxPayload: limits.maxEnvelopeBytes, handshakeTimeout, perMessageDeflate: false, followRedirects: false,
+    maxPayload: limits.maxMessageBytes, handshakeTimeout, perMessageDeflate: false, followRedirects: false,
     headers: options.headers, ca: typeof options.ca === 'string' ? options.ca : options.ca && Buffer.from(options.ca),
   });
   return new Promise((resolve, reject) => {
@@ -27,7 +27,7 @@ export async function connectWebSocket(url: string, options: WebSocketConnectOpt
     function aborted() { refuse('wire connection aborted'); }
     function opened() {
       if (socket.protocol !== WEBSOCKET_PROTOCOL) { refuse('wire subprotocol negotiation failed'); return; }
-      const wire = new WebSocketWire(socket, limits); cleanup(); resolve(wire);
+      const wire = new WebSocketEndpoint(socket, limits); cleanup(); resolve(wire);
     }
     socket.once('open', opened); socket.once('error', failed); socket.once('close', failed);
     options.signal?.addEventListener('abort', aborted, { once: true });

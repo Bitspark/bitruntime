@@ -1,9 +1,11 @@
-// Package websocket implements bitwire's binary envelope carrier.
+// Package websocket implements bitwire's binary message carrier.
 package websocket
 
 import (
 	"context"
 	"errors"
+	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	"io"
 	"sync"
 	"time"
 
@@ -12,15 +14,16 @@ import (
 	carrier "github.com/coder/websocket"
 )
 
-type queuedEnvelope struct {
-	envelope wire.Envelope
-	size     int
+type queuedMessage struct {
+	message ontos.Value
+	size    int
 }
 
 // Endpoint owns one WebSocket and implements the shared interface directly.
 type Endpoint struct {
 	mu         sync.Mutex
 	conn       *carrier.Conn
+	stream     io.Closer
 	limits     core.PairOptions
 	closeAfter time.Duration
 	ctx        context.Context
@@ -32,21 +35,21 @@ type Endpoint struct {
 	writeWake  chan struct{}
 	ended      bool
 	result     wire.Termination
-	handler    func(wire.Envelope)
+	handler    func(ontos.Value)
 	attachment uint64
-	in         []queuedEnvelope
+	in         []queuedMessage
 	inBytes    int
 	out        [][]byte
 	outBytes   int
 	outCount   int
 }
 
-func newEndpoint(conn *carrier.Conn, options normalizedOptions) *Endpoint {
+func newEndpoint(conn *carrier.Conn, stream io.Closer, options normalizedOptions) *Endpoint {
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Endpoint{conn: conn, limits: options.PairOptions, closeAfter: options.CloseTimeout,
+	e := &Endpoint{conn: conn, stream: stream, limits: options.PairOptions, closeAfter: options.CloseTimeout,
 		ctx: ctx, cancel: cancel, stop: make(chan struct{}), closed: make(chan struct{}),
 		readWake: make(chan struct{}, 1), writeWake: make(chan struct{}, 1)}
-	conn.SetReadLimit(int64(e.limits.MaxEnvelopeBytes))
+	conn.SetReadLimit(int64(e.limits.MaxMessageBytes))
 	e.workers.Add(2)
 	go e.read()
 	go e.write()
@@ -54,12 +57,8 @@ func newEndpoint(conn *carrier.Conn, options normalizedOptions) *Endpoint {
 	return e
 }
 
-func (e *Endpoint) Send(envelope wire.Envelope) error {
-	captured, err := wire.CaptureEnvelope(envelope)
-	if err != nil {
-		return err
-	}
-	bytes, err := wire.EncodeEnvelope(captured, e.limits.MaxEnvelopeBytes)
+func (e *Endpoint) Send(message ontos.Value) error {
+	bytes, err := wire.EncodeMessage(message, e.limits.MaxMessageBytes)
 	if err != nil {
 		return err
 	}
@@ -68,7 +67,7 @@ func (e *Endpoint) Send(envelope wire.Envelope) error {
 	if e.ended {
 		return errors.New("wire is closed")
 	}
-	if e.outCount >= e.limits.MaxQueuedEnvelopes || len(bytes) > e.limits.MaxQueuedBytes-e.outBytes {
+	if e.outCount >= e.limits.MaxQueuedMessages || len(bytes) > e.limits.MaxQueuedBytes-e.outBytes {
 		return errors.New("wire output queue is full")
 	}
 	e.out = append(e.out, bytes)
@@ -78,7 +77,7 @@ func (e *Endpoint) Send(envelope wire.Envelope) error {
 	return nil // Local admission, before carrier delivery or application execution.
 }
 
-func (e *Endpoint) Receive(handler func(wire.Envelope)) (func(), error) {
+func (e *Endpoint) Receive(handler func(ontos.Value)) (func(), error) {
 	if handler == nil {
 		return nil, errors.New("wire handler must be nonnil")
 	}
@@ -133,10 +132,10 @@ func (e *Endpoint) end(result wire.Termination) {
 		if result.Kind == "closed" {
 			forced := make(chan struct{})
 			timer := time.AfterFunc(e.closeAfter, func() {
-				// CloseNow alone waits for an already-started Close handshake.
-				// Cancel the active read/write context to interrupt that handshake.
+				// CloseNow waits for an already-started handshake. That handshake
+				// can own its own read context, so cancelling e.ctx is insufficient.
+				_ = e.stream.Close()
 				e.cancel()
-				_ = e.conn.CloseNow()
 				close(forced)
 			})
 			_ = e.conn.Close(carrier.StatusNormalClosure, "")
@@ -166,12 +165,12 @@ func (e *Endpoint) read() {
 			return
 		}
 		if kind != carrier.MessageBinary {
-			e.end(wire.Termination{Kind: "failed", Message: "binary wire envelope required"})
+			e.end(wire.Termination{Kind: "failed", Message: "binary wire message required"})
 			return
 		}
-		envelope, err := wire.DecodeEnvelope(bytes, e.limits.MaxEnvelopeBytes)
+		message, err := wire.DecodeMessage(bytes, e.limits.MaxMessageBytes)
 		if err != nil {
-			e.end(wire.Termination{Kind: "failed", Message: "invalid wire envelope"})
+			e.end(wire.Termination{Kind: "failed", Message: "invalid wire message"})
 			return
 		}
 		e.mu.Lock()
@@ -179,12 +178,12 @@ func (e *Endpoint) read() {
 			e.mu.Unlock()
 			return
 		}
-		if len(e.in) >= e.limits.MaxQueuedEnvelopes || len(bytes) > e.limits.MaxQueuedBytes-e.inBytes {
+		if len(e.in) >= e.limits.MaxQueuedMessages || len(bytes) > e.limits.MaxQueuedBytes-e.inBytes {
 			e.mu.Unlock()
 			e.end(wire.Termination{Kind: "failed", Message: "wire input queue is full"})
 			return
 		}
-		e.in = append(e.in, queuedEnvelope{envelope, len(bytes)})
+		e.in = append(e.in, queuedMessage{message, len(bytes)})
 		e.inBytes += len(bytes)
 		wake(e.readWake)
 		e.mu.Unlock()
@@ -236,7 +235,7 @@ func (e *Endpoint) dispatch() {
 				break
 			}
 			item, handler := e.in[0], e.handler
-			e.in[0], e.in = queuedEnvelope{}, e.in[1:]
+			e.in[0], e.in = queuedMessage{}, e.in[1:]
 			e.inBytes -= item.size
 			e.mu.Unlock()
 			// Dequeued work is dispatched. Closure does not cancel that application work.
@@ -246,7 +245,7 @@ func (e *Endpoint) dispatch() {
 						e.end(wire.Termination{Kind: "failed", Message: "wire receive handler failed"})
 					}
 				}()
-				handler(item.envelope)
+				handler(item.message)
 			}()
 		}
 	}
@@ -259,4 +258,4 @@ func wake(ch chan struct{}) {
 	}
 }
 
-var _ wire.Wire = (*Endpoint)(nil)
+var _ wire.Endpoint = (*Endpoint)(nil)

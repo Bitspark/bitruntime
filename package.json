@@ -1,7 +1,7 @@
 {
   "name": "@bitspark/bitruntime",
-  "version": "0.5.0",
-  "description": "Generic envelope wire endpoints, byte-keyed trees, local pairs and WebSocket carriers.",
+  "version": "0.6.0",
+  "description": "Addressless endpoints, addressed access, byte-keyed trees, local pairs and WebSocket carriers.",
   "license": "Apache-2.0",
   "type": "module",
   "repository": {
@@ -35,10 +35,11 @@
     "test": "npm run build && node --test --test-timeout=30000 \"core/ts/test/*.test.mjs\" \"websocket/ts/test/*.test.mjs\""
   },
   "dependencies": {
-    "@bitspark/bitwire": "0.4.0",
+    "@bitspark/bitwire": "0.5.0",
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@bitspark/deixis-core": "0.6.0",
     "@types/node": "24.19.0",
     "@types/ws": "8.18.2",
     "typescript": "5.9.3"

@@ -1,4 +1,4 @@
-import { Atom, type Children, type DeixisNode, type Envelope, type Path } from '@bitspark/bitwire';
+import { Atom, type Children, type DeixisNode, type Value, type Path } from '@bitspark/bitwire';
 export function compose<T>(own: T, children: Children<T> = []): DeixisNode<T> {
   const captured: Children<T> = Object.freeze(children.map(([key,node])=> {
     if(!(key instanceof Atom)||!node)throw new TypeError('invalid child');
@@ -29,7 +29,10 @@ export function compose<T>(own: T, children: Children<T> = []): DeixisNode<T> {
   return Object.freeze(node);
 }
 export function select<T>(node:DeixisNode<T>,path:Path):DeixisNode<T>|undefined{return node.at(path);}
-// Exact leaf routing preserves the original whole envelope and never falls back.
-export function route(tree:DeixisNode<(e:Envelope)=>void>,envelope:Envelope):boolean {
-  const target=tree.at(envelope.destination);if(!target)return false;target.own()(envelope);return true;
+// Select a complete receiver tree, then invoke exactly the selected own value.
+export function route(tree: DeixisNode<(message: Value) => void>, path: Path, message: Value): boolean {
+  const target = tree.at(path);
+  if (!target) return false;
+  target.own()(message);
+  return true;
 }

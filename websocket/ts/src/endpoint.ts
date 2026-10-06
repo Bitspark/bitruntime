@@ -1,9 +1,9 @@
-// A single WebSocket endpoint realizing the generic Wire lifecycle.
+// A single WebSocket endpoint realizing the generic Endpoint lifecycle.
 import WebSocket from 'ws';
 import type { RawData } from 'ws';
-import type { Envelope, Wire, Termination } from '@bitspark/bitwire';
-import type { WebSocketWireOptions } from './options.ts';
-import { captureEnvelope, encodeEnvelope, decodeEnvelope, DEFAULT_MAX_ENVELOPE_BYTES } from '@bitspark/bitwire';
+import type { Value, Endpoint, Termination } from '@bitspark/bitwire';
+import type { WebSocketEndpointOptions } from './options.ts';
+import { encodeMessage, decodeMessage, DEFAULT_MAX_MESSAGE_BYTES } from '@bitspark/bitwire';
 import { positiveLimit } from '../../../core/ts/src/limits.ts';
 
 export function timerLimit(value: number): number {
@@ -11,17 +11,17 @@ export function timerLimit(value: number): number {
   if (value > 2147483647) throw new RangeError('wire timer exceeds the Node timer range');
   return value;
 }
-export function wireOptions(options: WebSocketWireOptions = {}) {
-  const maxEnvelopeBytes = positiveLimit(options.maxEnvelopeBytes ?? DEFAULT_MAX_ENVELOPE_BYTES);
-  if (maxEnvelopeBytes > 2147483647) throw new RangeError('wire envelope limit exceeds the WebSocket receiver range');
+export function wireOptions(options: WebSocketEndpointOptions = {}) {
+  const maxMessageBytes = positiveLimit(options.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES);
+  if (maxMessageBytes > 2147483647) throw new RangeError('wire message limit exceeds the WebSocket receiver range');
   return {
-    maxEnvelopeBytes,
+    maxMessageBytes,
     maxQueuedBytes: positiveLimit(options.maxQueuedBytes ?? 64 * 1024 * 1024),
-    maxQueuedEnvelopes: positiveLimit(options.maxQueuedEnvelopes ?? 1024),
+    maxQueuedMessages: positiveLimit(options.maxQueuedMessages ?? 1024),
     closeTimeoutMs: timerLimit(options.closeTimeoutMs ?? 5000),
   };
 }
-export class WebSocketWire implements Wire {
+export class WebSocketEndpoint implements Endpoint {
   readonly closed: Promise<Termination>;
   readonly #done: Promise<void>;
   readonly #socket: WebSocket;
@@ -30,13 +30,13 @@ export class WebSocketWire implements Wire {
   #termination: Termination | undefined;
   #released = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
-  #handler: ((envelope: Envelope) => void) | undefined;
-  #queue: { envelope: Envelope; size: number }[] = [];
+  #handler: ((message: Value) => void) | undefined;
+  #queue: { message: Value; size: number }[] = [];
   #queuedBytes = 0;
   #scheduled = false;
   #writes = 0;
   #writeBytes = 0;
-  constructor(socket: WebSocket, options: WebSocketWireOptions = {}) {
+  constructor(socket: WebSocket, options: WebSocketEndpointOptions = {}) {
     if (socket.readyState !== WebSocket.OPEN) throw new Error('WebSocket is not open');
     this.#socket = socket; this.#options = wireOptions(options);
     this.closed = new Promise((resolve) => { this.#resolve = resolve; });
@@ -46,10 +46,10 @@ export class WebSocketWire implements Wire {
     socket.on('error', this.#error);
     socket.on('close', this.#close);
   }
-  async send(envelope: Envelope): Promise<void> {
+  async send(message: Value): Promise<void> {
     if (this.#termination || this.#socket.readyState !== WebSocket.OPEN) throw new Error('wire is closed');
-    const captured = captureEnvelope(envelope), bytes = encodeEnvelope(captured, this.#options.maxEnvelopeBytes);
-    if (this.#writes >= this.#options.maxQueuedEnvelopes || this.#writeBytes + bytes.byteLength > this.#options.maxQueuedBytes) {
+    const bytes = encodeMessage(message, this.#options.maxMessageBytes);
+    if (this.#writes >= this.#options.maxQueuedMessages || this.#writeBytes + bytes.byteLength > this.#options.maxQueuedBytes) {
       throw new Error('wire output queue is full');
     }
     this.#writes++; this.#writeBytes += bytes.byteLength;
@@ -61,7 +61,7 @@ export class WebSocketWire implements Wire {
     } catch (error) { this.#writes--; this.#writeBytes -= bytes.byteLength; throw error; }
     // Local admission, deliberately before the write callback or any peer reply.
   }
-  receive(handler: (envelope: Envelope) => void): () => void {
+  receive(handler: (message: Value) => void): () => void {
     if (this.#termination || this.#socket.readyState !== WebSocket.OPEN) throw new Error('wire is closed');
     if (this.#handler) throw new Error('wire already has a receive handler');
     if (typeof handler !== 'function') throw new TypeError('wire handler must be a function');
@@ -98,14 +98,14 @@ export class WebSocketWire implements Wire {
   #message = (data: RawData, binary: boolean): void => {
     if (this.#termination) return;
     try {
-      if (!binary || !Buffer.isBuffer(data)) throw new Error('binary envelope required');
-      const envelope = decodeEnvelope(data, this.#options.maxEnvelopeBytes);
-      if (this.#queue.length >= this.#options.maxQueuedEnvelopes || this.#queuedBytes + data.byteLength > this.#options.maxQueuedBytes) {
+      if (!binary || !Buffer.isBuffer(data)) throw new Error('binary message required');
+      const message = decodeMessage(data, this.#options.maxMessageBytes);
+      if (this.#queue.length >= this.#options.maxQueuedMessages || this.#queuedBytes + data.byteLength > this.#options.maxQueuedBytes) {
         throw new Error('wire input queue is full');
       }
-      this.#queue.push({ envelope, size: data.byteLength });
+      this.#queue.push({ message, size: data.byteLength });
       this.#queuedBytes += data.byteLength; this.#schedule();
-    } catch { this.fail('invalid wire envelope or input limit exceeded'); }
+    } catch { this.fail('invalid wire message or input limit exceeded'); }
   };
   #schedule(): void {
     if (this.#scheduled || !this.#handler || this.#termination) return;
@@ -114,7 +114,7 @@ export class WebSocketWire implements Wire {
       this.#scheduled = false;
       while (this.#handler && this.#queue.length && !this.#termination) {
         const selected = this.#queue.shift()!; this.#queuedBytes -= selected.size;
-        try { this.#handler(selected.envelope); } catch { this.fail('wire receive handler failed'); }
+        try { this.#handler(selected.message); } catch { this.fail('wire receive handler failed'); }
       }
     });
   }

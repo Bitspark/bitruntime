@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	ontos "github.com/Bitspark/bitwire/ontos/go/core"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	"reflect"
 )
@@ -100,11 +101,11 @@ func (n *Node[T]) Decompose() wire.Parts[T] { return wire.Parts[T]{Own: n.own, C
 func Select[T any](n wire.DeixisNode[T], path wire.Path) (wire.DeixisNode[T], bool) {
 	return n.At(path)
 }
-func Route(n wire.DeixisNode[func(wire.Envelope)], e wire.Envelope) bool {
-	target, ok := n.At(e.Destination)
+func Route(n wire.DeixisNode[func(ontos.Value)], path wire.Path, message ontos.Value) bool {
+	target, ok := n.At(path)
 	if !ok {
 		return false
 	}
-	target.Own()(e)
+	target.Own()(message)
 	return true
 }
