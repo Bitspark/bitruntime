@@ -118,7 +118,7 @@ both raw/addressed Go/TypeScript connection roles pass without replacements.
 The Linux race check, fresh packed consumer and cross-language exchanges passed
 in required CI run 37397422257 at d3f85d87. The focused
 [independent runtime read](https://github.com/Bitspark/bitruntime/pull/36#issuecomment-6007279634)
-approved that revision against the Deixis and ownership contracts; its requested
+approved that revision against the deixis and ownership contracts; its requested
 malformed-value availability clarification is stated above. Every final source
 revision must still pass required CI before integration and tag publication.
 Earlier 76-test system2 evidence used candidate packages; system2 must still
