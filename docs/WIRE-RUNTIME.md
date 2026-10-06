@@ -1,6 +1,6 @@
 # Layered wire realization
 
-**Target decided 2026-10-05; implemented, release validation in progress.** This
+**Target decided 2026-10-05; implemented.** This
 realizes bitwire decision 0015 and deixis's structural identity under the owner's cross-repository
 correction. It replaces the generic envelope realization without retaining its
 API or decoder. The target is specified before these runtime changes.
@@ -19,6 +19,15 @@ the existing endpoint. Detach, close and termination use that same lifetime;
 the raw endpoint and facade cannot have concurrent receive owners. Malformed
 addressed data fails that endpoint via its handler-failure rule. Raw delivery
 itself does not interpret the addressed grammar.
+
+This is the addressed profile's fail-fast policy: one malformed addressed value
+from a peer terminates that endpoint and discards its queued work. An unknown
+well-formed route is instead structural absence, with no ancestor fallback and
+no implied connection failure. The malformed-value failure does not shut down
+other server connections. A deployment requiring the same connection to survive
+malformed addressed traffic needs a separately defined validating ingress policy
+before this profile's decoder; the current facade offers no discard-and-continue
+mode. Strict rejection is an availability limit, not a peer authentication claim.
 
 `bind(addressedWire,path)` captures a relative path and exposes only Wire.send.
 `under(addressedWire,prefix)` captures a prefix and concatenates later paths.
@@ -106,6 +115,11 @@ At dependency commit fb8c7d5, the lock files resolve published bitwire 0.5.0 and
 deixis 0.6.0 from public npm and Go sources. A fresh npm installation, TypeScript
 checking, all 21 runtime tests, Go tests and vet, the fresh packed consumer and
 both raw/addressed Go/TypeScript connection roles pass without replacements.
-The Linux race check and exact final CI revision remain integration gates.
+The Linux race check, fresh packed consumer and cross-language exchanges passed
+in required CI run 37397422257 at d3f85d87. The focused
+[independent runtime read](https://github.com/Bitspark/bitruntime/pull/36#issuecomment-6007279634)
+approved that revision against the Deixis and ownership contracts; its requested
+malformed-value availability clarification is stated above. Every final source
+revision must still pass required CI before integration and tag publication.
 Earlier 76-test system2 evidence used candidate packages; system2 must still
 validate the actual runtime release before its own local integration.
