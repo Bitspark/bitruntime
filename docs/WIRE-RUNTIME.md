@@ -1,6 +1,6 @@
 # Layered wire realization
 
-**Target decided 2026-10-05; implementation and validation in progress.** This
+**Target decided 2026-10-05; implemented, release validation in progress.** This
 realizes bitwire decision 0015 and deixis's structural identity under the owner's cross-repository
 correction. It replaces the generic envelope realization without retaining its
 API or decoder. The target is specified before these runtime changes.
@@ -102,8 +102,10 @@ socket; the deadline closes that endpoint-owned stream directly. Caller-owned
 HTTP transports and servers remain open. The unchanged closure contract requires
 this fix. Both server-side and repeated client-side silent-peer tests pass.
 
-At the candidate source review, TypeScript checking and all 21 runtime tests,
-Go tests and vet, both raw/addressed Go/TypeScript connection roles, and all 76
-system2 tests pass against local candidate packages. This is development evidence,
-not a released dependency check. Public lock files and release validation remain
-pending bitwire 0.5.0 publication; the draft PR cannot land before those gates pass.
+At dependency commit fb8c7d5, the lock files resolve published bitwire 0.5.0 and
+deixis 0.6.0 from public npm and Go sources. A fresh npm installation, TypeScript
+checking, all 21 runtime tests, Go tests and vet, the fresh packed consumer and
+both raw/addressed Go/TypeScript connection roles pass without replacements.
+The Linux race check and exact final CI revision remain integration gates.
+Earlier 76-test system2 evidence used candidate packages; system2 must still
+validate the actual runtime release before its own local integration.
