@@ -22,6 +22,22 @@ import (
 
 func text(s string) ontos.Atom { return ontos.NewAtom([]byte(s)) }
 
+// The raw grammar, for crafting frames by hand; the runtime itself uses the codec.
+var (
+	header   = ontos.NewAtom([]byte("bitwire/hydrated/1"))
+	tupleTag = ontos.NewAtom([]byte{1})
+	wireTag  = ontos.NewAtom([]byte{2})
+)
+
+// value is a reference's tagged body node, (02, ((path...), scope, id)).
+func (r Reference) value() ontos.Value {
+	segments := make([]ontos.Value, len(r.Path))
+	for i, a := range r.Path {
+		segments[i] = a
+	}
+	return ontos.NewTuple(wireTag, ontos.NewTuple(ontos.NewTuple(segments...), r.Scope, r.ID))
+}
+
 // pending reads an endpoint's queue length under its lock.
 func (e *Endpoint) pending() int {
 	e.mu.Lock()
@@ -29,7 +45,7 @@ func (e *Endpoint) pending() int {
 	return len(e.queue)
 }
 
-func tuple(t *testing.T, items ...HydratedValue) HydratedValue {
+func tuple(t *testing.T, items ...wire.HydratedValue) wire.HydratedValue {
 	t.Helper()
 	v, err := NewTuple(items...)
 	if err != nil {
@@ -38,7 +54,7 @@ func tuple(t *testing.T, items ...HydratedValue) HydratedValue {
 	return v
 }
 
-func items(t *testing.T, v HydratedValue) []HydratedValue {
+func items(t *testing.T, v wire.HydratedValue) []wire.HydratedValue {
 	t.Helper()
 	xs, ok := Items(v)
 	if !ok {
@@ -78,9 +94,9 @@ func ground(v jsonValue) ontos.Value {
 	return ontos.NewTuple(out...)
 }
 
-func wires(v HydratedValue) int {
+func wires(v wire.HydratedValue) int {
 	switch x := v.(type) {
-	case HydratedWire:
+	case wire.HydratedWire:
 		return 1
 	case Tuple:
 		n := 0
@@ -117,14 +133,14 @@ func TestObservation1VectorsRoundTrip(t *testing.T) {
 	s, _ := NewScope(NewNamespace("vectors"), wire.Path{text("vectors")}, nil, DefaultLimits)
 	for _, c := range v.Encode {
 		body := ground(c.Body)
-		live, err := s.decode(body, 0, map[string]HydratedWire{}, &budget{})
+		live, err := s.decodeBody(body, map[string]wire.HydratedWire{})
 		if err != nil {
 			t.Fatalf("%s: %v", c.Name, err)
 		}
 		if got, want := wires(live), strings.Count(c.Live, "wire{"); got != want {
 			t.Fatalf("%s: %d wire leaves, want %d", c.Name, got, want)
 		}
-		again, err := s.encode(live, 0, map[*Endpoint]ontos.Atom{}, &budget{})
+		again, err := s.encodeBody(live, map[*Endpoint]ontos.Atom{})
 		if err != nil || !again.Equal(body) {
 			t.Fatalf("%s: re-encoding changed the body: %v", c.Name, err)
 		}
@@ -134,7 +150,7 @@ func TestObservation1VectorsRoundTrip(t *testing.T) {
 		}
 	}
 	for _, c := range v.RejectBody {
-		if _, err := s.decode(ground(c.Value), 0, map[string]HydratedWire{}, &budget{}); !errors.Is(err, MalformedFrame) {
+		if _, err := s.decodeBody(ground(c.Value), map[string]wire.HydratedWire{}); !errors.Is(err, MalformedFrame) {
 			t.Fatalf("%s: %v", c.Name, err)
 		}
 	}
@@ -287,7 +303,7 @@ func (tr *tree) replace(t *testing.T, name string) *Scope {
 }
 
 // serve exposes a domain endpoint at a participant: the composition bootstrap.
-func serve(t *testing.T, s *Scope, handler func(HydratedValue, ReceivedContext)) (*Endpoint, Reference) {
+func serve(t *testing.T, s *Scope, handler func(wire.HydratedValue, wire.ReceivedContext)) (*Endpoint, Reference) {
 	e := NewEndpoint(64)
 	if _, err := e.Receive(handler); err != nil {
 		t.Fatal(err)
@@ -301,21 +317,21 @@ func serve(t *testing.T, s *Scope, handler func(HydratedValue, ReceivedContext))
 }
 
 type received struct {
-	value   HydratedValue
-	context ReceivedContext
+	value   wire.HydratedValue
+	context wire.ReceivedContext
 }
 
 // call is a domain adapter: it sends (op, args..., reply) and closes its reply
 // endpoint after the reply. It knows no reference, table or route.
-func call(t *testing.T, target HydratedWire, op string, args ...HydratedValue) received {
+func call(t *testing.T, target wire.HydratedWire, op string, args ...wire.HydratedValue) received {
 	t.Helper()
 	reply := NewEndpoint(1)
 	defer reply.Close()
 	got := make(chan received, 1)
-	if _, err := reply.Receive(func(v HydratedValue, c ReceivedContext) { got <- received{v, c} }); err != nil {
+	if _, err := reply.Receive(func(v wire.HydratedValue, c wire.ReceivedContext) { got <- received{v, c} }); err != nil {
 		t.Fatal(err)
 	}
-	if err := target.Send(tuple(t, append(append([]HydratedValue{text(op)}, args...), reply)...)); err != nil {
+	if err := target.Send(tuple(t, append(append([]wire.HydratedValue{text(op)}, args...), reply)...)); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -329,19 +345,19 @@ func call(t *testing.T, target HydratedWire, op string, args ...HydratedValue) r
 
 // echo is a domain provider: (op, arg, reply). "echo" replies (arg); "continue"
 // replies (arg, continuation), where the continuation forwards one value to the
-// HydratedWire it carries and then closes.
-func echo(t *testing.T) func(HydratedValue, ReceivedContext) {
-	return func(v HydratedValue, _ ReceivedContext) {
+// wire.HydratedWire it carries and then closes.
+func echo(t *testing.T) func(wire.HydratedValue, wire.ReceivedContext) {
+	return func(v wire.HydratedValue, _ wire.ReceivedContext) {
 		xs, _ := Items(v)
-		op, arg, reply := xs[0].(ontos.Atom), xs[1], xs[len(xs)-1].(HydratedWire)
+		op, arg, reply := xs[0].(ontos.Atom), xs[1], xs[len(xs)-1].(wire.HydratedWire)
 		switch string(op.Bytes()) {
 		case "echo":
 			_ = reply.Send(arg)
 		case "continue":
 			cont := NewEndpoint(1)
-			_, _ = cont.Receive(func(next HydratedValue, _ ReceivedContext) {
+			_, _ = cont.Receive(func(next wire.HydratedValue, _ wire.ReceivedContext) {
 				ys, _ := Items(next)
-				_ = ys[1].(HydratedWire).Send(ys[0])
+				_ = ys[1].(wire.HydratedWire).Send(ys[0])
 				_ = cont.Close()
 			})
 			r, _ := NewTuple(arg, cont)
@@ -367,18 +383,18 @@ func TestObservation2RecursionThroughAnOpaqueRouter(t *testing.T) {
 			t.Fatal("wrong reply")
 		}
 		third := NewEndpoint(1)
-		got := make(chan HydratedValue, 1)
-		_, _ = third.Receive(func(v HydratedValue, _ ReceivedContext) { got <- v })
-		if err := xs[1].(HydratedWire).Send(tuple(t, text("third HydratedWire"), third)); err != nil {
+		got := make(chan wire.HydratedValue, 1)
+		_, _ = third.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
+		if err := xs[1].(wire.HydratedWire).Send(tuple(t, text("third wire.HydratedWire"), third)); err != nil {
 			t.Fatal(err)
 		}
 		select {
 		case v := <-got:
-			if !v.(ontos.Atom).Equal(text("third HydratedWire")) {
+			if !v.(ontos.Atom).Equal(text("third wire.HydratedWire")) {
 				t.Fatal("wrong third value")
 			}
 		case <-time.After(5 * time.Second):
-			t.Fatal("third HydratedWire not reached")
+			t.Fatal("third wire.HydratedWire not reached")
 		}
 		if n := tr.frames(); n != 4 {
 			t.Fatalf("%d frames crossed the middle, want 4", n)
@@ -416,22 +432,26 @@ func TestObservation4ASharedWireEndsOnlyWithItsOwner(t *testing.T) {
 		tr := newTree(t, carrier, "client", "provider", "third")
 		a, b, c := tr.parts["client"].scope(), tr.parts["provider"].scope(), tr.parts["third"].scope()
 		var mu sync.Mutex
-		var atB, atC HydratedWire
-		_, refC := serve(t, c, func(v HydratedValue, _ ReceivedContext) { mu.Lock(); atC = v.(HydratedWire); mu.Unlock() })
-		toC := b.Connect(refC)
-		_, refB := serve(t, b, func(v HydratedValue, _ ReceivedContext) {
+		var atB, atC wire.HydratedWire
+		_, refC := serve(t, c, func(v wire.HydratedValue, _ wire.ReceivedContext) {
 			mu.Lock()
-			atB = v.(HydratedWire)
+			atC = v.(wire.HydratedWire)
 			mu.Unlock()
-			_ = toC.Send(v) // B forwards the HydratedWire it received
+		})
+		toC := b.Connect(refC)
+		_, refB := serve(t, b, func(v wire.HydratedValue, _ wire.ReceivedContext) {
+			mu.Lock()
+			atB = v.(wire.HydratedWire)
+			mu.Unlock()
+			_ = toC.Send(v) // B forwards the wire.HydratedWire it received
 		})
 		w := NewEndpoint(8)
-		var seen []ReceivedContext
-		_, _ = w.Receive(func(_ HydratedValue, ctx ReceivedContext) { mu.Lock(); seen = append(seen, ctx); mu.Unlock() })
+		var seen []wire.ReceivedContext
+		_, _ = w.Receive(func(_ wire.HydratedValue, ctx wire.ReceivedContext) { mu.Lock(); seen = append(seen, ctx); mu.Unlock() })
 		if err := a.Connect(refB).Send(w); err != nil {
 			t.Fatal(err)
 		}
-		eventually(t, "C did not receive the HydratedWire", func() bool { mu.Lock(); defer mu.Unlock(); return atC != nil })
+		eventually(t, "C did not receive the wire.HydratedWire", func() bool { mu.Lock(); defer mu.Unlock(); return atC != nil })
 		if b.Live() != 1 || c.Live() != 1 {
 			t.Fatalf("forwarding registered state: B %d C %d", b.Live(), c.Live())
 		}
@@ -455,7 +475,7 @@ func TestObservation4ASharedWireEndsOnlyWithItsOwner(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		if len(seen) != 1 {
-			t.Fatal("a closed HydratedWire received")
+			t.Fatal("a closed wire.HydratedWire received")
 		}
 	})
 }
@@ -467,7 +487,7 @@ func TestObservation5NoProxyOfAProxy(t *testing.T) {
 	ref, _ := a.Expose(w)
 	imported := b.Connect(ref)
 	for _, s := range []*Scope{b, c} { // a second local participant encodes it too
-		got, err := s.encode(imported, 0, map[*Endpoint]ontos.Atom{}, &budget{})
+		got, err := s.encodeBody(imported, map[*Endpoint]ontos.Atom{})
 		if err != nil || !got.Equal(ref.value()) {
 			t.Fatalf("%v: reference changed", err)
 		}
@@ -477,21 +497,21 @@ func TestObservation5NoProxyOfAProxy(t *testing.T) {
 	}
 }
 
-type funcWire func(HydratedValue) error
+type funcWire func(wire.HydratedValue) error
 
-func (f funcWire) Send(v HydratedValue) error { return f(v) }
+func (f funcWire) Send(v wire.HydratedValue) error { return f(v) }
 
 func TestObservation6RefusalsBeforeAdmission(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	a, b := tr.parts["client"].scope(), tr.parts["provider"].scope()
-	_, svc := serve(t, b, func(HydratedValue, ReceivedContext) {})
+	_, svc := serve(t, b, func(wire.HydratedValue, wire.ReceivedContext) {})
 	target := a.Connect(svc)
 	kept := NewEndpoint(1)
-	if err := target.Send(tuple(t, kept, funcWire(func(HydratedValue) error { return nil }))); !errors.Is(err, Unexportable) {
-		t.Fatalf("arbitrary HydratedWire: %v", err)
+	if err := target.Send(tuple(t, kept, funcWire(func(wire.HydratedValue) error { return nil }))); !errors.Is(err, Unexportable) {
+		t.Fatalf("arbitrary wire.HydratedWire: %v", err)
 	}
 	other, _ := NewScope(NewNamespace("other"), wire.Path{text("x")}, nil, DefaultLimits)
-	foreign := other.Connect(Reference{wire.Path{text("y")}, ontos.NewAtom(make([]byte, 16)), text("1")})
+	foreign := other.Connect(Reference{wire.Path{text("y")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))})
 	if err := target.Send(tuple(t, kept, foreign)); !errors.Is(err, ForeignNamespace) {
 		t.Fatalf("foreign proxy: %v", err)
 	}
@@ -508,12 +528,12 @@ func TestObservation6RefusalsBeforeAdmission(t *testing.T) {
 func TestObservation7StaleScopeCannotReachTheReplacement(t *testing.T) {
 	carriers(t, func(t *testing.T, carrier string) {
 		tr := newTree(t, carrier, "client", "provider")
-		_, svc := serve(t, tr.parts["provider"].scope(), func(HydratedValue, ReceivedContext) {})
+		_, svc := serve(t, tr.parts["provider"].scope(), func(wire.HydratedValue, wire.ReceivedContext) {})
 		old := tr.parts["client"].scope().Connect(svc)
 		fresh := tr.replace(t, "provider")
 		var mu sync.Mutex
 		hit := false
-		_, _ = serve(t, fresh, func(HydratedValue, ReceivedContext) { mu.Lock(); hit = true; mu.Unlock() })
+		_, _ = serve(t, fresh, func(wire.HydratedValue, wire.ReceivedContext) { mu.Lock(); hit = true; mu.Unlock() })
 		_ = old.Send(text("stale"))
 		eventually(t, "not refused stale-scope", func() bool {
 			d := tr.diagnostics()
@@ -530,19 +550,19 @@ func TestObservation7StaleScopeCannotReachTheReplacement(t *testing.T) {
 func TestObservation9ReturningHome(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	a, b := tr.parts["client"].scope(), tr.parts["provider"].scope()
-	var back HydratedWire
+	var back wire.HydratedWire
 	var mu sync.Mutex
 	proceed := make(chan struct{})
-	_, svc := serve(t, b, func(v HydratedValue, _ ReceivedContext) {
+	_, svc := serve(t, b, func(v wire.HydratedValue, _ wire.ReceivedContext) {
 		<-proceed
 		xs, _ := Items(v)
 		r, _ := NewTuple(text("data"), xs[0], xs[1]) // send both Wires home
-		_ = xs[2].(HydratedWire).Send(r)
+		_ = xs[2].(wire.HydratedWire).Send(r)
 	})
 	home, gone := NewEndpoint(1), NewEndpoint(1)
 	reply := NewEndpoint(1)
-	got := make(chan HydratedValue, 1)
-	_, _ = reply.Receive(func(v HydratedValue, _ ReceivedContext) { got <- v })
+	got := make(chan wire.HydratedValue, 1)
+	_, _ = reply.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
 	if err := a.Connect(svc).Send(tuple(t, home, gone, reply)); err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +574,7 @@ func TestObservation9ReturningHome(t *testing.T) {
 	case v := <-got:
 		xs := items(t, v)
 		mu.Lock()
-		back = xs[1].(HydratedWire)
+		back = xs[1].(wire.HydratedWire)
 		mu.Unlock()
 		if !xs[0].(ontos.Atom).Equal(text("data")) {
 			t.Fatal("the rest of the message was lost")
@@ -562,7 +582,7 @@ func TestObservation9ReturningHome(t *testing.T) {
 		if back != home.Wire() {
 			t.Fatal("own reference did not return to the original face")
 		}
-		if err := xs[2].(HydratedWire).Send(text("x")); !errors.Is(err, UnknownExport) {
+		if err := xs[2].(wire.HydratedWire).Send(text("x")); !errors.Is(err, UnknownExport) {
 			t.Fatalf("a withdrawn own reference: %v", err)
 		}
 	case <-time.After(5 * time.Second):
@@ -573,7 +593,7 @@ func TestObservation9ReturningHome(t *testing.T) {
 func TestObservation10ReceivedContextIsNotData(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	got := make(chan received, 1)
-	_, svc := serve(t, tr.parts["provider"].scope(), func(v HydratedValue, c ReceivedContext) { got <- received{v, c} })
+	_, svc := serve(t, tr.parts["provider"].scope(), func(v wire.HydratedValue, c wire.ReceivedContext) { got <- received{v, c} })
 	forged := ontos.NewTuple(text("context"), text("client-link"))
 	if err := tr.parts["client"].scope().Connect(svc).Send(forged); err != nil {
 		t.Fatal(err)
@@ -589,7 +609,7 @@ func TestObservation11AtomicDecoding(t *testing.T) {
 	b := tr.parts["provider"].scope()
 	var mu sync.Mutex
 	delivered := 0
-	_, svc := serve(t, b, func(HydratedValue, ReceivedContext) { mu.Lock(); delivered++; mu.Unlock() })
+	_, svc := serve(t, b, func(wire.HydratedValue, wire.ReceivedContext) { mu.Lock(); delivered++; mu.Unlock() })
 	w := NewEndpoint(1)
 	ref, _ := tr.parts["client"].scope().Expose(w)
 	bad := ontos.NewTuple(tupleTag, ontos.NewTuple(ref.value(), ontos.NewTuple(tupleTag)))
@@ -610,7 +630,7 @@ func (refusingSender) Send(wire.Path, ontos.Value) error { return errors.New("ca
 
 func TestObservation12RegistrationBeforeAdmission(t *testing.T) {
 	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, refusingSender{}, DefaultLimits)
-	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), text("1")})
+	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))})
 	w := NewEndpoint(1)
 	if err := target.Send(tuple(t, w)); err == nil {
 		t.Fatal("the carrier's refusal was hidden")
@@ -632,7 +652,7 @@ func TestObservation14Ordering(t *testing.T) {
 		tr := newTree(t, carrier, "client", "provider")
 		var mu sync.Mutex
 		var seen []string
-		_, svc := serve(t, tr.parts["provider"].scope(), func(v HydratedValue, _ ReceivedContext) {
+		_, svc := serve(t, tr.parts["provider"].scope(), func(v wire.HydratedValue, _ wire.ReceivedContext) {
 			mu.Lock()
 			seen = append(seen, string(v.(ontos.Atom).Bytes()))
 			mu.Unlock()
@@ -654,16 +674,16 @@ func TestObservation14Ordering(t *testing.T) {
 
 func TestObservation15Bounds(t *testing.T) {
 	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, refusingSender{}, Limits{Exports: 2, Nodes: 8, Depth: 3, Bytes: 64})
-	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), text("1")})
-	deep := HydratedValue(text("x"))
+	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))})
+	deep := wire.HydratedValue(text("x"))
 	for i := 0; i < 5; i++ {
 		deep = tuple(t, deep)
 	}
-	wide := make([]HydratedValue, 9)
+	wide := make([]wire.HydratedValue, 9)
 	for i := range wide {
 		wide[i] = text("y")
 	}
-	for name, v := range map[string]HydratedValue{
+	for name, v := range map[string]wire.HydratedValue{
 		"depth":   deep,
 		"nodes":   tuple(t, wide...),
 		"bytes":   ontos.NewAtom(make([]byte, 65)),
@@ -689,7 +709,7 @@ func TestObservation15Bounds(t *testing.T) {
 	})
 }
 
-// Observation 8: one reference grants its own HydratedWire and no sibling, including an
+// Observation 8: one reference grants its own wire.HydratedWire and no sibling, including an
 // endpoint the owner exported for another holder.
 func TestObservation8SiblingForgery(t *testing.T) {
 	carriers(t, func(t *testing.T, carrier string) {
@@ -697,8 +717,8 @@ func TestObservation8SiblingForgery(t *testing.T) {
 		provider := tr.parts["provider"].scope()
 		var mu sync.Mutex
 		private := 0
-		_, public := serve(t, provider, func(HydratedValue, ReceivedContext) {})
-		_, intended := serve(t, provider, func(HydratedValue, ReceivedContext) { mu.Lock(); private++; mu.Unlock() })
+		_, public := serve(t, provider, func(wire.HydratedValue, wire.ReceivedContext) {})
+		_, intended := serve(t, provider, func(wire.HydratedValue, wire.ReceivedContext) { mu.Lock(); private++; mu.Unlock() })
 		// The private endpoint really is held by another participant.
 		if err := tr.parts["third"].scope().Connect(intended).Send(text("legitimate")); err != nil {
 			t.Fatal(err)
@@ -711,9 +731,13 @@ func TestObservation8SiblingForgery(t *testing.T) {
 		client := tr.parts["client"].scope()
 		bump := append([]byte(nil), public.ID.Bytes()...)
 		bump[15]++
-		forged := []ontos.Atom{ontos.NewAtom(bump), ontos.NewAtom(make([]byte, 16)), text("2"), text("0000000000000002")}
+		forged := []ontos.Atom{ontos.NewAtom(bump), ontos.NewAtom(make([]byte, 16)), text("0000000000000002")}
 		for _, id := range forged {
 			_ = client.Connect(Reference{public.Path, public.Scope, id}).Send(text("forged"))
+		}
+		// A counter-like id of the wrong length is refused before it leaves.
+		if err := client.Connect(Reference{public.Path, public.Scope, text("2")}).Send(text("forged")); !errors.Is(err, MalformedFrame) {
+			t.Fatalf("a 1-octet id: %v", err)
 		}
 		eventually(t, "forged references were not refused", func() bool { return len(tr.diagnostics()) == len(forged) })
 		for _, d := range tr.diagnostics() {
@@ -770,7 +794,7 @@ func TestObservation13ConcurrentSends(t *testing.T) {
 	registered := s.byEndpoint[face]
 	for _, f := range rec.frames {
 		leaf := f.(ontos.Tuple).At(3).(ontos.Tuple).At(1).(ontos.Tuple).At(0) // body (01, ((02, ref)))
-		ref, err := readReference(leaf.(ontos.Tuple).At(1))
+		ref, err := ReadReference(leaf.(ontos.Tuple).At(1))
 		if err != nil || !ref.ID.Equal(registered) {
 			t.Fatal("a frame names an id that was not registered")
 		}
@@ -814,9 +838,9 @@ func TestObservation15IncomingFrameBytes(t *testing.T) {
 // the sending face; a stale detach removes only its own receiver; a receiver's
 // failure terminates its endpoint, which ends its export.
 func TestObservation17EndpointLaws(t *testing.T) {
-	got := make(chan HydratedValue, 2)
+	got := make(chan wire.HydratedValue, 2)
 	local := NewEndpoint(4)
-	if _, err := local.Receive(func(v HydratedValue, _ ReceivedContext) { got <- v }); err != nil {
+	if _, err := local.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v }); err != nil {
 		t.Fatal(err)
 	}
 	private := NewEndpoint(1)
@@ -830,10 +854,10 @@ func TestObservation17EndpointLaws(t *testing.T) {
 	}
 
 	e := NewEndpoint(4)
-	stale, _ := e.Receive(func(HydratedValue, ReceivedContext) {})
+	stale, _ := e.Receive(func(wire.HydratedValue, wire.ReceivedContext) {})
 	stale()
-	seen := make(chan HydratedValue, 1)
-	if _, err := e.Receive(func(v HydratedValue, _ ReceivedContext) { seen <- v }); err != nil {
+	seen := make(chan wire.HydratedValue, 1)
+	if _, err := e.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { seen <- v }); err != nil {
 		t.Fatal(err)
 	}
 	stale()
@@ -846,7 +870,7 @@ func TestObservation17EndpointLaws(t *testing.T) {
 
 	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, nil, DefaultLimits)
 	failing := NewEndpoint(4)
-	if _, err := failing.Receive(func(HydratedValue, ReceivedContext) { panic("receiver fault") }); err != nil {
+	if _, err := failing.Receive(func(wire.HydratedValue, wire.ReceivedContext) { panic("receiver fault") }); err != nil {
 		t.Fatal(err)
 	}
 	ref, _ := s.Expose(failing)
@@ -874,11 +898,11 @@ func TestObservation17EndpointLaws(t *testing.T) {
 // exactly when the receiver does, at tight node, depth and byte budgets.
 func TestObservation15SenderAndReceiverCountAlike(t *testing.T) {
 	face := NewEndpoint(1)
-	nested := HydratedValue(text("x"))
+	nested := wire.HydratedValue(text("x"))
 	for i := 0; i < 3; i++ {
 		nested = tuple(t, nested, face)
 	}
-	values := map[string]HydratedValue{
+	values := map[string]wire.HydratedValue{
 		"one face three times": tuple(t, face, face, face),
 		"nested faces":         nested,
 		"a long atom":          ontos.NewAtom(make([]byte, 96)),
@@ -932,8 +956,8 @@ func TestObservation15LongReferencePath(t *testing.T) {
 	limits := Limits{Exports: 4, Nodes: 8, Depth: 2, Bytes: 4096}
 	receiver, _ := NewScope(NewNamespace("x"), wire.Path{text("r")}, nil, limits)
 	target := NewEndpoint(4)
-	got := make(chan HydratedValue, 1)
-	_, _ = target.Receive(func(v HydratedValue, _ ReceivedContext) { got <- v })
+	got := make(chan wire.HydratedValue, 1)
+	_, _ = target.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
 	ref, _ := receiver.Expose(target)
 	long := wire.Path{text("a"), text("b"), text("c"), text("d"), text("e")}
 	far := Reference{long, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))}
@@ -949,11 +973,48 @@ func TestObservation15LongReferencePath(t *testing.T) {
 // Observation 17, construction: the zero Tuple, the only one NewTuple does not
 // make, arrives as the ground empty tuple.
 func TestObservation17ZeroTupleIsGround(t *testing.T) {
-	got := make(chan HydratedValue, 1)
+	got := make(chan wire.HydratedValue, 1)
 	local := NewEndpoint(1)
-	_, _ = local.Receive(func(v HydratedValue, _ ReceivedContext) { got <- v })
+	_, _ = local.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
 	_ = local.Wire().Send(Tuple{})
 	if v, ok := (<-got).(ontos.Tuple); !ok || v.Len() != 0 {
 		t.Fatal("the zero hydrated tuple was not delivered as the ground empty tuple")
+	}
+}
+
+// Observation 17, local edges: a bound below one is refused, and a local send
+// recognizes leaves as dehydration would.
+func TestObservation17LocalEdges(t *testing.T) {
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("an endpoint bound of zero was accepted")
+			}
+		}()
+		NewEndpoint(0)
+	}()
+	got := make(chan wire.HydratedValue, 4)
+	local := NewEndpoint(8)
+	_, _ = local.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
+	foreign := funcWire(func(wire.HydratedValue) error { return nil })
+	if err := local.Wire().Send(foreign); !errors.Is(err, Unexportable) {
+		t.Fatalf("a bare foreign Wire: %v", err)
+	}
+	if err := local.Wire().Send(tuple(t, text("a"), tuple(t, foreign))); !errors.Is(err, Unexportable) {
+		t.Fatalf("a nested foreign Wire: %v", err)
+	}
+	closed := NewEndpoint(1)
+	_ = closed.Close()
+	if err := local.Wire().Send(tuple(t, closed.Wire())); !errors.Is(err, Unexportable) {
+		t.Fatalf("a closed face: %v", err)
+	}
+	if err := local.Wire().Send(tuple(t, text("ok"), NewEndpoint(1))); err != nil {
+		t.Fatal(err)
+	}
+	<-got
+	select {
+	case v := <-got:
+		t.Fatalf("a refused local value was delivered: %v", v)
+	case <-time.After(50 * time.Millisecond):
 	}
 }

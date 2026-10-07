@@ -1,17 +1,17 @@
-// Evidence for bitwire decision 0019 (proposed): the first edition of the
-// hydrated wire protocol, bitwire/hydrated/1, realized in TypeScript. It mirrors
-// hydrated/go and is not a released API.
-import { Atom, Tuple, atom, tuple, encodeMessage, pathEqual } from '@bitspark/bitwire';
-import type { Path, AddressedWire, Termination } from '@bitspark/bitwire';
-
-/** A hydrated value: a ground ontos value, a HydratedTuple or a HydratedWire. */
-export type HydratedValue = Atom | Tuple | HydratedTuple | HydratedWire;
-
-/** Sends one hydrated value. Only an Endpoint's face or a proxy can travel (D7). */
-export interface HydratedWire { readonly kind: 'wire'; send(value: HydratedValue): Promise<void> }
-
-/** What the composition establishes about an arrival; never part of a value (D4). */
-export type ReceivedContext = unknown;
+// The realization of bitwire decision 0019, the hydrated wire protocol's first
+// edition, over bitwire's public hydrated declarations and its shared pure codec.
+// The codec owns the grammar, validation and bounds; this module owns export ids
+// and staging, reference recognition, liveness and endpoints.
+import {
+  Atom, Tuple, atom, tuple, pathEqual,
+  HydratedCodecError, HydratedDataAtom, HydratedDataTuple, HydratedReference,
+  packHydratedBody, unpackHydratedBody, packHydratedFrame, unpackHydratedFrame,
+  packHydratedReference, unpackHydratedReference,
+} from '@bitspark/bitwire';
+import type {
+  Path, AddressedWire, Termination, HydratedValue, HydratedWire, HydratedEndpoint, ReceivedContext,
+  HydratedData, HydratedCodecLimits, HydratedTuple as HydratedTupleView,
+} from '@bitspark/bitwire';
 
 /** The context of a send that never left the process. */
 export const LOCAL: unique symbol = Symbol('local');
@@ -34,10 +34,6 @@ export class Refusal extends Error {
   }
 }
 
-const HEADER = atom(new TextEncoder().encode('bitwire/hydrated/1'));
-const TUPLE_TAG = atom([1]);
-const WIRE_TAG = atom([2]);
-
 /** A tuple with at least one HydratedWire beneath it; see hydratedTuple (D1). */
 /** Only this module constructs hydrated tuples, so every one is canonical (D1, D7). */
 const CONSTRUCT = Symbol('hydrated tuple');
@@ -46,7 +42,7 @@ const CONSTRUCT = Symbol('hydrated tuple');
  * A tuple with at least one HydratedWire beneath it, shaped like bitwire's HydratedTuple
  * (a ground Tuple has the same shape). Construct it with hydratedTuple().
  */
-export class HydratedTuple {
+export class HydratedTuple implements HydratedTupleView {
   readonly kind = 'tuple' as const;
   readonly #items: readonly HydratedValue[];
   constructor(items: readonly HydratedValue[], token?: symbol) {
@@ -64,6 +60,24 @@ const isWire = (v: unknown): v is HydratedWire => typeof (v as HydratedWire | un
 
 /** An Endpoint travels only as its sending face, on every path (D7). */
 const sendOnly = (v: HydratedValue): HydratedValue => (v instanceof Endpoint ? v.wire : v);
+
+/**
+ * Validates a value for local delivery as dehydration would for a remote one (D1,
+ * D7): only runtime-recognized leaves arrive, and an endpoint arrives as its face.
+ */
+function local(v: HydratedValue): HydratedValue {
+  const check = (x: HydratedValue): void => {
+    if (x instanceof Atom || x instanceof Tuple) return;
+    if (x instanceof HydratedTuple) { x.items().forEach(check); return; }
+    if (x instanceof Face) { if (owners.get(x)!.isClosed) throw new Refusal(UNEXPORTABLE); return; }
+    if (x instanceof Proxy) return;
+    if (x && typeof (x as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
+    throw new TypeError('hydrated: not a value');
+  };
+  const projected = sendOnly(v);
+  check(projected);
+  return projected;
+}
 
 /** Captures items; returns the ground tuple when no HydratedWire is beneath them. */
 export function hydratedTuple(items: readonly HydratedValue[]): HydratedValue {
@@ -94,14 +108,20 @@ export interface Reference { readonly path: Path; readonly scope: Atom; readonly
 
 const hex = (a: Atom) => Array.from(a.bytes(), (b) => b.toString(16).padStart(2, '0')).join('');
 const refKey = (r: Reference) => `${r.path.map(hex).join('/')}|${r.path.length}|${hex(r.scope)}|${hex(r.id)}`;
-const refValue = (r: Reference): Tuple => tuple([WIRE_TAG, tuple([tuple(r.path), r.scope, r.id])]);
+/** A codec failure, named as the protocol's refusal (D8). */
+function refusal(error: unknown): never {
+  if (error instanceof HydratedCodecError) throw new Refusal(error.kind === 'limit' ? LIMIT : MALFORMED_FRAME);
+  throw error;
+}
+const codec = <T>(f: () => T): T => { try { return f(); } catch (error) { return refusal(error); } };
+const codecLimits = (l: Limits): HydratedCodecLimits => ({ nodes: l.nodes, depth: l.depth, bytes: l.bytes });
 
 /**
  * A local HydratedEndpoint: one receiver, ordered dispatch never inline with the
  * admitting send, a bounded queue and an owner lifetime. Its face is what a value
  * carries; closing it ends its export in every scope (D7).
  */
-export class Endpoint implements HydratedWire {
+export class Endpoint implements HydratedEndpoint {
   readonly kind = 'wire' as const;
   readonly wire: HydratedWire;
   /** Resolves with how the endpoint ended, as bitwire's Endpoint contract does. */
@@ -110,6 +130,7 @@ export class Endpoint implements HydratedWire {
   #limit: number;
   #handler: ((value: HydratedValue, context: ReceivedContext) => void) | undefined;
   #generation = 0;
+  #failed = false;
   #failure: unknown;
   #isClosed = false;
   #draining = false;
@@ -118,7 +139,8 @@ export class Endpoint implements HydratedWire {
   readonly #exports = new Map<Scope, Atom>();
 
   constructor(limit = 1) {
-    this.#limit = Math.max(1, limit);
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new RangeError('hydrated: an endpoint bound must be a positive integer');
+    this.#limit = limit;
     this.wire = new Face(this);
     this.closed = new Promise((resolve) => { this.#resolveClosed = resolve; });
   }
@@ -144,7 +166,7 @@ export class Endpoint implements HydratedWire {
     const exports = [...this.#exports];
     this.#exports.clear();
     for (const [scope, id] of exports) scope._withdraw(this, id);
-    this.#termination = this.#failure === undefined
+    this.#termination = !this.#failed
       ? Object.freeze({ kind: 'closed' })
       : Object.freeze({ kind: 'failed', message: String((this.#failure as Error)?.message ?? this.#failure) });
     this.#resolveClosed(this.#termination);
@@ -180,6 +202,7 @@ export class Endpoint implements HydratedWire {
           this.#handler(d.value, d.context);
         } catch (error) {
           // A receiver failure terminates the endpoint, which ends its export.
+          this.#failed = true;
           this.#failure = error;
           void this.close();
         }
@@ -195,7 +218,7 @@ const owners = new WeakMap<Face, Endpoint>();
 class Face implements HydratedWire {
   readonly kind = 'wire' as const;
   constructor(endpoint: Endpoint) { owners.set(this, endpoint); Object.freeze(this); }
-  async send(value: HydratedValue): Promise<void> { owners.get(this)!._admit(sendOnly(value), LOCAL); }
+  async send(value: HydratedValue): Promise<void> { owners.get(this)!._admit(local(value), LOCAL); }
 }
 
 /**
@@ -222,15 +245,6 @@ class Proxy implements HydratedWire {
 /** Bounds of a scope (D8). */
 export interface Limits { exports: number; nodes: number; depth: number; bytes: number }
 export const DEFAULT_LIMITS: Limits = Object.freeze({ exports: 64, nodes: 4096, depth: 64, bytes: 1 << 20 });
-
-interface Budget { nodes: number; bytes: number }
-
-/**
- * The node, depth and byte bounds count the hydrated value, identically when
- * sending and receiving (D8): each atom, tuple and HydratedWire leaf is one node at its
- * tuple depth; bytes are atom bytes plus each HydratedWire leaf's reference material.
- */
-const refBytes = (path: Path): number => path.reduce((n, a) => n + a.length, 32);
 
 /** One participant's hydration state for one incarnation (Terms). */
 export class Scope {
@@ -308,78 +322,65 @@ export class Scope {
     }
   }
 
-  #spend(b: Budget, depth: number, bytes: number): void {
-    b.nodes++; b.bytes += bytes;
-    if (b.nodes > this.#limits.nodes || depth > this.#limits.depth || b.bytes > this.#limits.bytes) throw new Refusal(LIMIT);
-  }
-
-  /** Encodes atomically, registers new exports, then admits one frame (D5). */
+  /** Stages the value and registers its new exports in one step, then admits one frame (D5). */
   /** @internal */
   async _send(dest: Reference, value: HydratedValue): Promise<void> {
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
     const staged = new Map<Endpoint, Atom>();
-    const body = this._encode(value, 0, staged, { nodes: 0, bytes: 0 });
-    const frame = tuple([HEADER, dest.scope, dest.id, body]);
-    try { encodeMessage(frame, this.#limits.bytes); } catch { throw new Refusal(LIMIT); }
+    const body = this.#toData(value, 0, staged);
+    const frame = codec(() => packHydratedFrame({ scope: dest.scope, id: dest.id, body }, codecLimits(this.#limits)));
     this.#commit(staged);
     await this.#sender.send(dest.path, frame);
   }
 
-  /** @internal */
-  _encode(v: HydratedValue, depth: number, staged: Map<Endpoint, Atom>, b: Budget): Atom | Tuple {
-    if (v instanceof Atom) { this.#spend(b, depth, v.length); return v; }
+  /**
+   * Maps a live value onto the codec's structural data, staging an export for each
+   * new face. The codec checks every bound (D8); the depth guard only keeps a
+   * pathological value from exhausting the stack first.
+   */
+  #toData(v: HydratedValue, depth: number, staged: Map<Endpoint, Atom>): HydratedData {
+    if (depth > this.#limits.depth) throw new Refusal(LIMIT);
+    if (v instanceof Atom) return new HydratedDataAtom(v);
     if (v instanceof Tuple || v instanceof HydratedTuple) {
-      this.#spend(b, depth, 0);
-      return tuple([TUPLE_TAG, tuple(items(v)!.map((c) => this._encode(c, depth + 1, staged, b)))]);
+      return codec(() => new HydratedDataTuple(items(v)!.map((c) => this.#toData(c, depth + 1, staged))));
     }
-    if (v instanceof Endpoint) return this._encode(v.wire, depth, staged, b);
-    if (v instanceof Face) {
-      this.#spend(b, depth, refBytes(this.path));
-      return refValue({ path: this.path, scope: this.token, id: this.#exportId(owners.get(v)!, staged) });
-    }
+    if (v instanceof Endpoint) return this.#toData(v.wire, depth, staged);
+    if (v instanceof Face) return codec(() => new HydratedReference(this.path, this.token, this.#exportId(owners.get(v)!, staged)));
     if (v instanceof Proxy) {
       if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
-      this.#spend(b, depth, refBytes(v.ref.path));
-      return refValue(v.ref);
+      return codec(() => new HydratedReference(v.ref.path, v.ref.scope, v.ref.id));
     }
     if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
     throw new TypeError('hydrated: not a value');
+  }
+
+  /** Occurrences of one reference within the value share one proxy; nothing is retained (D7). */
+  #fromData(d: HydratedData, interned: Map<string, HydratedWire>): HydratedValue {
+    if (d instanceof HydratedDataAtom) return d.value;
+    if (d instanceof HydratedDataTuple) return hydratedTuple(d.items().map((c) => this.#fromData(c, interned)));
+    return this.#import({ path: d.path, scope: d.scope, id: d.id }, interned);
+  }
+
+  /** @internal The body halves of a frame. */
+  _encodeBody(v: HydratedValue, staged: Map<Endpoint, Atom>): Atom | Tuple {
+    const data = this.#toData(v, 0, staged);
+    return codec(() => packHydratedBody(data, codecLimits(this.#limits))) as Atom | Tuple;
+  }
+
+  /** @internal */
+  _decodeBody(body: Atom | Tuple, interned: Map<string, HydratedWire>): HydratedValue {
+    return this.#fromData(codec(() => unpackHydratedBody(body, codecLimits(this.#limits))), interned);
   }
 
   /** Decides one value addressed to this participant's own path (D4); throws a Refusal as a host diagnostic. */
   deliver(path: Path, message: Atom | Tuple, context: ReceivedContext): void {
     if (!pathEqual(path, this.path)) throw new Refusal(MALFORMED_FRAME);
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
-    // The whole frame counts against the byte bound, reference material included (D8).
-    try { encodeMessage(message, this.#limits.bytes); } catch { throw new Refusal(LIMIT); }
-    if (!(message instanceof Tuple) || message.length !== 4 || !HEADER.equals(message.at(0)!)) throw new Refusal(MALFORMED_FRAME);
-    const [, token, id, body] = message.items();
-    if (!(token instanceof Atom) || !(id instanceof Atom) || token.length !== 16 || id.length !== 16) throw new Refusal(MALFORMED_FRAME);
-    if (!token.equals(this.token)) throw new Refusal(STALE_SCOPE);
-    const target = this.#byId.get(hex(id));
+    const frame = codec(() => unpackHydratedFrame(message, codecLimits(this.#limits)));
+    if (!frame.scope.equals(this.token)) throw new Refusal(STALE_SCOPE);
+    const target = this.#byId.get(hex(frame.id));
     if (!target) throw new Refusal(UNKNOWN_EXPORT);
-    const value = this._decode(body!, 0, new Map(), { nodes: 0, bytes: 0 });
-    target._admit(value, context);
-  }
-
-  /** Occurrences of one reference within the value share one proxy; nothing is retained (D7). */
-  /** @internal */
-  _decode(v: Atom | Tuple, depth: number, interned: Map<string, HydratedWire>, b: Budget): HydratedValue {
-    if (v instanceof Atom) { this.#spend(b, depth, v.length); return v; }
-    if (v.length !== 2) throw new Refusal(MALFORMED_FRAME);
-    const [tag, payload] = v.items();
-    if (!(tag instanceof Atom) || tag.length !== 1) throw new Refusal(MALFORMED_FRAME);
-    if (tag.equals(TUPLE_TAG)) {
-      if (!(payload instanceof Tuple)) throw new Refusal(MALFORMED_FRAME);
-      this.#spend(b, depth, 0);
-      return hydratedTuple(payload.items().map((c) => this._decode(c, depth + 1, interned, b)));
-    }
-    if (tag.equals(WIRE_TAG)) {
-      const ref = readReference(payload!);
-      this.#spend(b, depth, refBytes(ref.path));
-      return this.#import(ref, interned);
-    }
-    throw new Refusal(MALFORMED_FRAME);
+    target._admit(this.#fromData(frame.body, new Map()), context);
   }
 
   /** A reference home in the current scope returns the original face; stale or withdrawn, a HydratedWire that refuses (D7). */
@@ -397,15 +398,12 @@ export class Scope {
 }
 
 /** Reads a reference payload ((path...), scope, id). */
-/** Path segments are reference material: they count toward the byte bound, not as nodes or depth (D8). */
 export function readReference(v: Atom | Tuple): Reference {
-  if (!(v instanceof Tuple) || v.length !== 3) throw new Refusal(MALFORMED_FRAME);
-  const [p, scope, id] = v.items();
-  if (!(p instanceof Tuple)) throw new Refusal(MALFORMED_FRAME);
-  const path = p.items().map((s) => { if (!(s instanceof Atom)) throw new Refusal(MALFORMED_FRAME); return s; });
-  if (!(scope instanceof Atom) || !(id instanceof Atom) || scope.length !== 16 || id.length !== 16) throw new Refusal(MALFORMED_FRAME);
-  return Object.freeze({ path: Object.freeze(path), scope, id });
+  const r = codec(() => unpackHydratedReference(v, codecLimits(DEFAULT_LIMITS)));
+  return Object.freeze({ path: Object.freeze([...r.path]), scope: r.scope, id: r.id });
 }
 
 /** The reference payload of a reference, for composition bootstrap over ground data. */
-export function referenceValue(ref: Reference): Tuple { return tuple([tuple(ref.path), ref.scope, ref.id]); }
+export function referenceValue(ref: Reference): Atom | Tuple {
+  return codec(() => packHydratedReference(new HydratedReference(ref.path, ref.scope, ref.id), codecLimits(DEFAULT_LIMITS))) as Atom | Tuple;
+}

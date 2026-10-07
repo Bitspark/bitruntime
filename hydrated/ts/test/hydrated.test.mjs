@@ -20,13 +20,13 @@ test('observation 1: vectors round-trip (bitwire#83 accepted at 6e33fb3, pinned)
   const s = new Scope(new Namespace('vectors'), [text('vectors')], { send: async () => {} });
   for (const c of v.encode) {
     const body = from(c.body);
-    const live = s._decode(body, 0, new Map(), { nodes: 0, bytes: 0 });
+    const live = s._decodeBody(body, new Map());
     assert.equal(wires(live), (c.live.match(/wire\{/g) ?? []).length, c.name);
-    const again = s._encode(live, 0, new Map(), { nodes: 0, bytes: 0 });
+    const again = s._encodeBody(live, new Map());
     assert.equal(Buffer.from(encodeMessage(again)).toString('hex'), c.hex, c.name);
   }
   for (const c of v.rejectBody) {
-    assert.throws(() => s._decode(from(c.value), 0, new Map(), { nodes: 0, bytes: 0 }), (e) => e.reason === MALFORMED_FRAME, c.name);
+    assert.throws(() => s._decodeBody(from(c.value), new Map()), (e) => e.reason === MALFORMED_FRAME, c.name);
   }
 });
 
@@ -167,8 +167,10 @@ for (const carrier of ['pair', 'websocket']) {
     assert.equal(pub.id.length, 16);
     assert.ok(!pub.id.equals(intended.id));
     const bump = Uint8Array.from(pub.id.bytes()); bump[15]++;
-    const forged = [atom(bump), atom(new Uint8Array(16)), text('2'), text('0000000000000002')];
+    const forged = [atom(bump), atom(new Uint8Array(16)), text('0000000000000002')];
     for (const id of forged) await n.parts.client.scope.connect({ ...pub, id }).send(text('forged')).catch(() => {});
+    // A counter-like id of the wrong length is refused before it leaves.
+    await assert.rejects(n.parts.client.scope.connect({ ...pub, id: text('2') }).send(text('forged')), (e) => e.reason === MALFORMED_FRAME);
     await eventually(() => n.diags.length === forged.length, 'forged references were not refused');
     for (const d of n.diags) assert.ok(d.who === 'provider' && ['unknown-export', 'malformed-frame'].includes(d.reason), JSON.stringify(d));
     assert.equal(privateHits, 1);
@@ -269,4 +271,26 @@ test('observation 17, construction: the exported tuple class cannot bypass proje
   const inner = items(items(got[0])[0])[0];
   assert.equal(inner, priv.wire, 'a nested endpoint kept its authority');
   assert.ok(hydratedTuple([text('a')]) instanceof Tuple, 'a tuple without a Wire is not ground');
+});
+
+test('observation 17, local edges: bounds, failure tracking and recognition on local sends', async () => {
+  for (const bad of [0, -1, 1.5, NaN, Infinity]) assert.throws(() => new Endpoint(bad), RangeError, String(bad));
+  const silent = new Endpoint(1);
+  silent.receive(() => { throw undefined; });
+  await silent.wire.send(text('x'));
+  assert.equal((await silent.closed).kind, 'failed', 'a receiver throwing undefined still failed');
+
+  const got = [];
+  const local = new Endpoint(8);
+  local.receive((v) => got.push(v));
+  const foreign = { kind: 'wire', send: async () => {} };
+  await assert.rejects(local.wire.send(foreign), (e) => e.reason === UNEXPORTABLE);
+  await assert.rejects(local.wire.send(hydratedTuple([text('a'), hydratedTuple([foreign])])), (e) => e.reason === UNEXPORTABLE);
+  const closed = new Endpoint(1);
+  const closedFace = closed.wire;
+  await closed.close();
+  await assert.rejects(local.wire.send(hydratedTuple([closedFace])), (e) => e.reason === UNEXPORTABLE);
+  await local.wire.send(hydratedTuple([text('ok'), new Endpoint(1)]));
+  await eventually(() => got.length === 1, 'the valid value was not delivered');
+  assert.equal(got.length, 1, 'a refused local value was delivered');
 });

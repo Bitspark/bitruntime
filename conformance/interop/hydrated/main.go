@@ -60,16 +60,16 @@ func participant(link wire.AddressedEndpoint, path wire.Path, onBootstrap func(o
 	return scope
 }
 
-func echo(v hydrated.HydratedValue, _ hydrated.ReceivedContext) {
+func echo(v wire.HydratedValue, _ wire.ReceivedContext) {
 	xs, _ := hydrated.Items(v)
 	cont := hydrated.NewEndpoint(1)
-	_, _ = cont.Receive(func(next hydrated.HydratedValue, _ hydrated.ReceivedContext) {
+	_, _ = cont.Receive(func(next wire.HydratedValue, _ wire.ReceivedContext) {
 		ys, _ := hydrated.Items(next)
-		_ = ys[1].(hydrated.HydratedWire).Send(ys[0])
+		_ = ys[1].(wire.HydratedWire).Send(ys[0])
 		_ = cont.Close()
 	})
 	r, _ := hydrated.NewTuple(xs[1], cont)
-	_ = xs[2].(hydrated.HydratedWire).Send(r)
+	_ = xs[2].(wire.HydratedWire).Send(r)
 }
 
 func serve() {
@@ -82,7 +82,11 @@ func serve() {
 		if err != nil {
 			fail(err)
 		}
-		if err := link.Send(bootstrap, ref.Payload()); err != nil {
+		payload, err := ref.Payload()
+		if err != nil {
+			fail(err)
+		}
+		if err := link.Send(bootstrap, payload); err != nil {
 			fail(err)
 		}
 	})
@@ -114,13 +118,13 @@ func client(url string) {
 		fail(err)
 	}
 	reply := hydrated.NewEndpoint(1)
-	replies := make(chan hydrated.HydratedValue, 1)
-	_, _ = reply.Receive(func(v hydrated.HydratedValue, _ hydrated.ReceivedContext) { replies <- v })
+	replies := make(chan wire.HydratedValue, 1)
+	_, _ = reply.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { replies <- v })
 	req, _ := hydrated.NewTuple(text("continue"), text("hello"), reply)
 	if err := scope.Connect(ref).Send(req); err != nil {
 		fail(err)
 	}
-	var r hydrated.HydratedValue
+	var r wire.HydratedValue
 	select {
 	case r = <-replies:
 	case <-time.After(10 * time.Second):
@@ -131,10 +135,10 @@ func client(url string) {
 		fail(fmt.Errorf("wrong reply"))
 	}
 	third := hydrated.NewEndpoint(1)
-	thirds := make(chan hydrated.HydratedValue, 1)
-	_, _ = third.Receive(func(v hydrated.HydratedValue, _ hydrated.ReceivedContext) { thirds <- v })
+	thirds := make(chan wire.HydratedValue, 1)
+	_, _ = third.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { thirds <- v })
 	next, _ := hydrated.NewTuple(text("third HydratedWire"), third)
-	if err := xs[1].(hydrated.HydratedWire).Send(next); err != nil {
+	if err := xs[1].(wire.HydratedWire).Send(next); err != nil {
 		fail(err)
 	}
 	select {
