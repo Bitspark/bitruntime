@@ -14,6 +14,7 @@
   },
   "include": [
     "core/ts/src/**/*.ts",
-    "websocket/ts/src/**/*.ts"
+    "websocket/ts/src/**/*.ts",
+    "export/ts/src/**/*.ts"
   ]
 }

@@ -17,6 +17,10 @@
     "./websocket": {
       "types": "./dist/websocket/ts/src/index.d.ts",
       "import": "./dist/websocket/ts/src/index.js"
+    },
+    "./export": {
+      "types": "./dist/export/ts/src/index.d.ts",
+      "import": "./dist/export/ts/src/index.js"
     }
   },
   "files": [
@@ -32,7 +36,7 @@
   "scripts": {
     "check": "tsc -p tsconfig.check.json",
     "build": "node scripts/build.mjs",
-    "test": "npm run build && node --test --test-timeout=30000 \"core/ts/test/*.test.mjs\" \"websocket/ts/test/*.test.mjs\""
+    "test": "npm run build && node --test --test-timeout=30000 \"core/ts/test/*.test.mjs\" \"websocket/ts/test/*.test.mjs\" \"export/ts/test/*.test.mjs\""
   },
   "dependencies": {
     "@bitspark/bitwire": "0.5.0",
