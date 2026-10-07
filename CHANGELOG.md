@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+- Release fix only; no library change from 0.7.0. The v0.7.0 release run
+  failed in its Go consumer smoke on Linux: the script built the hydrated peer
+  onto the peer's own source directory. The v0.7.0 tag and its Go module are
+  public, but no GitHub release or tarball was published for it. The smoke now
+  builds `hydrated-peer`, and CI runs it against each pushed commit.
+
 ## 0.7.0
 
 - Require bitwire 0.6.0, with its public hydrated declarations and shared pure

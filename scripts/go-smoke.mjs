@@ -24,7 +24,9 @@ run(['run', '.', 'smoke']);
 const hydrated = join(temp, 'hydrated');
 mkdirSync(hydrated);
 writeFileSync(join(hydrated, 'main.go'), readFileSync(new URL('../conformance/interop/hydrated/main.go', import.meta.url)));
-const binary = join(temp, process.platform === 'win32' ? 'hydrated.exe' : 'hydrated');
+// Not `hydrated`: that is the peer's source directory, and go build -o into an
+// existing directory writes the binary inside it.
+const binary = join(temp, process.platform === 'win32' ? 'hydrated-peer.exe' : 'hydrated-peer');
 run(['build', '-o', binary, './hydrated']);
 const server = spawn(binary, ['serve'], {stdio: ['pipe', 'pipe', 'inherit']});
 const url = await new Promise((resolve, reject) => {

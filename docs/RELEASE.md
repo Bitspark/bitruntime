@@ -1,4 +1,11 @@
-# bitruntime 0.7.0
+# bitruntime 0.7.1
+
+0.7.1 publishes what 0.7.0 tagged: its library code is unchanged. The v0.7.0
+release run failed in its Go consumer smoke on Linux after the tag, so v0.7.0
+has a public Go module but no GitHub release or tarball. The smoke is fixed and
+CI now runs it against each pushed commit.
+
+## The hydrated layer, introduced in 0.7.0
 
 This release adds the hydrated wire layer, realizing bitwire decision 0019 over
 bitwire 0.6.0's public hydrated declarations and shared pure codec. A message may

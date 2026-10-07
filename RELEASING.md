@@ -1,6 +1,6 @@
 # Releasing
 
-One root `vX.Y.Z` tag versions the Go module and TypeScript package together. bitruntime 0.7.0 implements bitwire 0.6.0: raw ontos-codec-v1 messages, the optional `bitwire/addressed/1` layer, WebSocket `bitwire.ontos.v2` and the hydrated layer `bitwire/hydrated/1` (decision 0019).
+One root `vX.Y.Z` tag versions the Go module and TypeScript package together. bitruntime 0.7.1 implements bitwire 0.6.0: raw ontos-codec-v1 messages, the optional `bitwire/addressed/1` layer, WebSocket `bitwire.ontos.v2` and the hydrated layer `bitwire/hydrated/1` (decision 0019).
 
 - Go module: `github.com/Bitspark/bitruntime`, packages `core/go`, `websocket/go` and `hydrated/go`.
 - TypeScript package: `@bitspark/bitruntime`, subpaths `/core`, `/websocket` and `/hydrated`.
