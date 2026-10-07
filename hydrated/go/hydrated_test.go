@@ -860,3 +860,59 @@ func TestObservation17EndpointLaws(t *testing.T) {
 		t.Fatalf("after termination: %v", err)
 	}
 }
+
+// Observation 15, symmetry: under the same bounds, the sender accepts a value
+// exactly when the receiver does, at tight node, depth and byte budgets.
+func TestObservation15SenderAndReceiverCountAlike(t *testing.T) {
+	face := NewEndpoint(1)
+	nested := Value(text("x"))
+	for i := 0; i < 3; i++ {
+		nested = tuple(t, nested, face)
+	}
+	values := map[string]Value{
+		"one face three times": tuple(t, face, face, face),
+		"nested faces":         nested,
+		"a long atom":          ontos.NewAtom(make([]byte, 96)),
+		"atoms and a face":     tuple(t, text("a"), text("bb"), face),
+	}
+	seen := map[bool]int{}
+	for nodes := 2; nodes <= 8; nodes++ {
+		for depth := 0; depth <= 4; depth++ {
+			for _, bytes := range []int{40, 64, 96, 128, 1024} {
+				limits := Limits{Exports: 4, Nodes: nodes, Depth: depth + 1, Bytes: bytes}
+				for name, v := range values {
+					rec := &recordingSender{}
+					sender, _ := NewScope(NewNamespace("x"), wire.Path{text("s")}, rec, limits)
+					receiver, _ := NewScope(NewNamespace("x"), wire.Path{text("r")}, nil, limits)
+					target := NewEndpoint(4)
+					ref, _ := receiver.Expose(target)
+					sendErr := sender.Connect(ref).Send(v)
+					accepted := sendErr == nil
+					seen[accepted]++
+					if !accepted && !errors.Is(sendErr, Limit) {
+						t.Fatalf("%s: %v", name, sendErr)
+					}
+					var recvErr error
+					if accepted {
+						recvErr = receiver.Deliver(receiver.path, rec.frames[0], nil)
+					} else {
+						// Build the frame without the sender's budget and offer it.
+						open, _ := NewScope(NewNamespace("x"), wire.Path{text("s")}, &recordingSender{}, Limits{Exports: 4, Nodes: 1 << 20, Depth: 1 << 10, Bytes: 1 << 20})
+						frame, err := open.stage(ref, v)
+						if err != nil {
+							t.Fatal(err)
+						}
+						recvErr = receiver.Deliver(receiver.path, frame, nil)
+					}
+					if accepted != (recvErr == nil) {
+						t.Fatalf("%s at nodes %d depth %d bytes %d: sender %v, receiver %v", name, nodes, depth+1, bytes, sendErr, recvErr)
+					}
+				}
+			}
+		}
+	}
+	if seen[true] == 0 || seen[false] == 0 {
+		t.Fatalf("the budgets never separated outcomes: %v", seen)
+	}
+	t.Logf("accepted %d, refused %d", seen[true], seen[false])
+}
