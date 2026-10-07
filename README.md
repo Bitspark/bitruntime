@@ -45,6 +45,12 @@ Connections use normal TLS verification. Dialing has a ten-second establishment 
 
 Complete tree construction rejects duplicate byte keys, cycles and malformed children, with validation depth bounded at 4096. Child nodes retain identity; supplied implementations must keep obeying the tree laws. Opaque addressed access does not provide complete tree discovery. Invocation, replies, subscriptions, authorization and live-wire allocation belong to explicitly defined layers above the wire.
 
+The [composition plan](docs/COMPOSITION.md) records the next target: reusable
+runtime-tree routing, multiplexing, export/import of existing wires and stream
+carriers. It distinguishes missing protocols and implementations from this
+released foundation, and separates runtime machinery from executable host policy
+and durable allocation services.
+
 ## Validation and delivery
 
 ```sh

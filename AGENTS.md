@@ -2,6 +2,9 @@
 
 Read [CHARTER.md](CHARTER.md), [the current realization](docs/WIRE-RUNTIME.md), and
 bitwire decision 0015 with its wire/carrier contracts at the pinned dependency.
+Read [the composition plan](docs/COMPOSITION.md) before adding routing across
+instances, multiplexing, wire export or stream carriers. Its pending protocol
+decisions are prerequisites, not implemented APIs or permission to infer laws.
 
 - Implement addressless Endpoints in carriers and one reusable addressed layer above them. Wire grants sending; Endpoint adds receive/close ownership; WireNode adds complete structure. Change missing or incorrect laws in bitwire first.
 - Keep service calls, errors, cancellation and streaming conventions in consumers. Do not introduce competing generic interfaces, RPC profiles, string-path aliases or compatibility implementations. The addressed layer connects different abstraction levels under bitwire decision 0015.

@@ -6,6 +6,12 @@ bitwire owns interface laws, canonical raw/addressed formats and independent con
 
 The current release unit contains `core/{go,ts}` and `websocket/{go,ts}`. One root Go module and one TypeScript package share a version. Complete trees are a separate facility; opaque endpoint paths do not grant tree discovery.
 
+The [composition plan](docs/COMPOSITION.md) assigns future reusable routing,
+multiplexing and wire-export implementations to bitruntime after their bitwire
+contracts are defined. Applications configure and host runtime instances;
+durable allocation services retain their own persistence and management policy.
+A downstream ownership description in deixis cannot assign those duties here.
+
 Each release states the implemented bitwire version, wire format and evidence. Independent bitwire raw and addressed observations and encoded vectors, native edge cases, Go race tests, Go/TypeScript WebSocket exchanges and fresh installed consumers check the promise. No compatibility implementation is carried across a breaking replacement. Historic tags and commits retain previous versions.
 
 Selection, composition and decomposition preserve own capabilities without invoking them. Sender trees and receiver trees are both valid instances. Path-cut associativity does not establish transport relay safety or progress; carrier guarantees require their own evidence. Revisions must name the affected upstream invariant, the counterexample or motivation, alternatives and consumer consequences before implementation. See [RELEASING.md](RELEASING.md) and [the current realization](docs/WIRE-RUNTIME.md).

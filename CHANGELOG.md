@@ -99,7 +99,7 @@
   call's slot before the caller holds it (nightseam#658), every ended carrier
   classifies as one closed error that forwarding answers as `disconnected`,
   observe-only close codes are never sent, and forwarding fails only a refused
-  message. See [the port record](docs/port-from-nightseam.md).
+  message. See [the historical port record](https://github.com/Bitspark/bitruntime/blob/8a492138dc914f69d9ee0c711ad80ecdc60726b8/docs/port-from-nightseam.md).
 - Hold the engine to nightseam v0.6.0 peers over real WebSockets in both roles
   and both languages, and to its bytes (`scripts/interop.mjs`).
 
