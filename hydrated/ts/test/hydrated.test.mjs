@@ -5,20 +5,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Atom, Tuple, atom, tuple, encodeMessage } from '@bitspark/bitwire';
-import { pair, addressed } from '../../../dist/core/ts/src/index.js';
-import { listenWebSocket, connectWebSocket } from '../../../dist/websocket/ts/src/index.js';
 import {
   Endpoint, Namespace, Scope, Refusal, hydratedTuple, items,
   UNKNOWN_EXPORT, STALE_SCOPE, UNEXPORTABLE, FOREIGN_NAMESPACE, MALFORMED_FRAME,
 } from '../../../dist/hydrated/ts/src/index.js';
-
-const text = (s) => atom(new TextEncoder().encode(s));
-const str = (a) => new TextDecoder().decode(a.bytes());
-const tick = () => new Promise((r) => setTimeout(r, 5));
-async function eventually(cond, what) {
-  for (let i = 0; i < 1000; i++) { if (cond()) return; await tick(); }
-  assert.fail(what);
-}
+import { text, str, eventually, PATHS, tree, serve, call } from './harness.mjs';
 
 test('observation 1: vectors round-trip (bitwire#83 at 20a6b6b, pinned)', () => {
   const raw = readFileSync(new URL('../../go/testdata/hydrated-vectors.json', import.meta.url));
@@ -38,59 +29,6 @@ test('observation 1: vectors round-trip (bitwire#83 at 20a6b6b, pinned)', () => 
     assert.throws(() => s._decode(from(c.value), 0, new Map(), { nodes: 0, bytes: 0 }), (e) => e.reason === MALFORMED_FRAME, c.name);
   }
 });
-
-const PATHS = { client: [text('client42')], provider: [text('a'), text('b'), text('service2')], third: [text('c')] };
-const key = (p) => p.map((a) => Buffer.from(a.bytes()).toString('hex')).join('/') + `#${p.length}`;
-
-async function links(t, carrier, n) {
-  if (carrier === 'pair') return Array.from({ length: n }, () => { const ends = pair(); t.after(() => ends[0].close()); return ends; });
-  const accepted = [];
-  let wake;
-  const listener = await listenWebSocket({ host: '127.0.0.1' }, (e) => { accepted.push(e); wake?.(); });
-  t.after(() => listener.close());
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const c = await connectWebSocket(listener.url);
-    t.after(() => c.close());
-    while (accepted.length <= i) await new Promise((r) => { wake = r; });
-    out.push([c, accepted[i]]);
-  }
-  return out;
-}
-
-// Participants around an opaque middle that knows routes and ground values only.
-async function tree(t, carrier, ...names) {
-  const ns = new Namespace('test');
-  const routes = new Map(), trace = [], diags = [], parts = {};
-  const ls = await links(t, carrier, names.length);
-  names.forEach((name, i) => {
-    const mine = addressed(ls[i][0]), mid = addressed(ls[i][1]);
-    routes.set(key(PATHS[name]), mid);
-    mid.receive((p, v) => { trace.push(v); void routes.get(key(p))?.send(p, v); });
-    const part = { name, ep: mine, scope: new Scope(ns, PATHS[name], mine) };
-    mine.receive((p, v) => {
-      try { part.scope.deliver(p, v, `${name}-link`); } catch (e) { diags.push({ who: name, reason: e.reason ?? e.message }); }
-    });
-    parts[name] = part;
-  });
-  return { ns, trace, diags, parts };
-}
-
-function serve(t, scope, handler) {
-  const e = new Endpoint(64);
-  e.receive(handler);
-  t.after(() => e.close());
-  return [e, scope.expose(e)];
-}
-
-async function call(target, op, ...args) {
-  const reply = new Endpoint(1);
-  const got = new Promise((resolve) => reply.receive((value, context) => resolve({ value, context })));
-  await target.send(hydratedTuple([text(op), ...args, reply]));
-  const r = await got;
-  await reply.close();
-  return r;
-}
 
 function echo(value) {
   const xs = items(value);
