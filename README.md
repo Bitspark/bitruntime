@@ -27,15 +27,17 @@ A raw endpoint can send an atom directly. The addressed facade works on the same
 
 `/core` exports `pair`, `addressed`, `bind`, `under`, `asAddressed`, `compose`, `select` and `route`. Binding captures a path and returns send authority only; `under` captures a prefix. `asAddressed` selects a WireNode node and invokes its own sender once. MissingPathError differs from refusal by that sender. `route(tree,path,message)` does the analogous explicit selection for receiver trees. Structural construction and selection invoke no own capabilities.
 
+`/hydrated` realizes bitwire's hydrated layer (decision 0019): `Scope`, `Endpoint`, `Namespace`, `hydratedTuple` and `items`. A message may carry live Wires. A participant's dispatcher hands its `Scope` each value addressed to its path, with the received context. An `Endpoint`'s `wire` is the only exportable local Wire, and closing the endpoint ends its export.
+
 `/websocket` exports `connectWebSocket`, `listenWebSocket` and `bindWebSocketServer`. A binding owns accepted endpoints and leaves a supplied HTTP/HTTPS server open. A convenience listener owns its HTTP server too. WebSocket negotiates `bitwire.ontos.v2` and carries whole ontos-codec-v1 values. The optional addressed layer encodes `bitwire/addressed/1` as an ordinary value above any carrier.
 
 ## Go
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.6.0
+go get github.com/Bitspark/bitruntime@v0.7.0
 ```
 
-Use `core/go.NewPair` and `websocket/go.Dial`, `Accept`, `NewServer` or `Listen`. They return bitwire Endpoints. `core/go.Addressed`, `Bind`, `Under` and `AsAddressed` implement the same layering as TypeScript; absent tree paths return ErrMissingPath. A receiver runs on its endpoint's dispatcher. Close does not wait for or cancel dispatched application work.
+Use `core/go.NewPair` and `websocket/go.Dial`, `Accept`, `NewServer` or `Listen`. They return bitwire Endpoints. `core/go.Addressed`, `Bind`, `Under` and `AsAddressed` implement the same layering as TypeScript; absent tree paths return ErrMissingPath. `hydrated/go` provides `NewScope`, `NewEndpoint`, `NewNamespace` and `NewTuple` over bitwire's hydrated declarations. A receiver runs on its endpoint's dispatcher. Close does not wait for or cancel dispatched application work.
 
 ## Limits and ownership
 
