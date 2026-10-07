@@ -59,6 +59,10 @@ and tree selection share exact byte-segment concatenation. Opaque access does
 not claim child enumeration. No generic RPC, discovery, multiplexing or wire
 allocation protocol is introduced.
 
+The [composition plan](COMPOSITION.md) records the separate target and work
+sequence for those facilities. It does not change this release's realized scope
+or turn the deferred observations below into passing evidence.
+
 ## Expected observations
 
 - Contract-owned raw endpoint observations pass unchanged in meaning: bare and
