@@ -1,5 +1,5 @@
 // Observations of bitwire decision 0019 for the TypeScript realization;
-// hydrated/go runs all thirteen, this suite the ones a second language must repeat.
+// hydrated/go runs the Go observations; this suite repeats those a second language must.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
