@@ -495,6 +495,17 @@ func (s *Scope) commit(staged map[*Endpoint]ontos.Atom) error {
 
 type budget struct{ nodes, bytes int }
 
+// The node, depth and byte bounds count the hydrated value, identically when
+// sending and receiving (D8): each atom, tuple and Wire leaf is one node at its
+// tuple depth; bytes are atom bytes plus each Wire leaf's reference material.
+func refBytes(path wire.Path) int {
+	n := 32 // scope token and export id
+	for _, a := range path {
+		n += a.Len()
+	}
+	return n
+}
+
 func (s *Scope) spend(b *budget, depth, n int) error {
 	b.nodes++
 	b.bytes += n
@@ -555,7 +566,7 @@ func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *b
 	case *Endpoint:
 		return s.encode(x.face, depth, staged, b)
 	case *face:
-		if err := s.spend(b, depth, 0); err != nil {
+		if err := s.spend(b, depth, refBytes(s.path)); err != nil {
 			return nil, err
 		}
 		id, err := s.exportID(x.e, staged)
@@ -567,7 +578,7 @@ func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *b
 		if x.ns != s.ns {
 			return nil, ForeignNamespace
 		}
-		return x.ref.value(), s.spend(b, depth, 0)
+		return x.ref.value(), s.spend(b, depth, refBytes(x.ref.Path))
 	case Wire:
 		return nil, Unexportable
 	}
@@ -628,14 +639,14 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 	if !ok || tag.Len() != 1 {
 		return nil, MalformedFrame
 	}
-	if err := s.spend(b, depth, 0); err != nil {
-		return nil, err
-	}
 	switch {
 	case tag.Equal(tupleTag):
 		children, ok := t.At(1).(ontos.Tuple)
 		if !ok {
 			return nil, MalformedFrame
+		}
+		if err := s.spend(b, depth, 0); err != nil {
+			return nil, err
 		}
 		items := make([]Value, children.Len())
 		for i, c := range children.Items() {
@@ -650,10 +661,8 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 		if err != nil {
 			return nil, err
 		}
-		for _, a := range append(append(wire.Path{}, r.Path...), r.Scope, r.ID) {
-			if err := s.spend(b, depth+1, a.Len()); err != nil {
-				return nil, err
-			}
+		if err := s.spend(b, depth, refBytes(r.Path)); err != nil {
+			return nil, err
 		}
 		return s.importRef(r, interned), nil
 	}

@@ -216,3 +216,37 @@ test('observation 17: Endpoint laws on every path', async () => {
   await eventually(() => failing.failure !== undefined && s.live === 0, 'the failing receiver did not terminate its endpoint');
   assert.throws(() => s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('y')]), undefined), (e) => e.reason === UNKNOWN_EXPORT);
 });
+
+test('observation 15, symmetry: sender and receiver count a value alike', async () => {
+  const face = new Endpoint(1);
+  let nested = text('x');
+  for (let i = 0; i < 3; i++) nested = hydratedTuple([nested, face]);
+  const values = {
+    'one face three times': hydratedTuple([face, face, face]),
+    'nested faces': nested,
+    'a long atom': atom(new Uint8Array(96)),
+    'atoms and a face': hydratedTuple([text('a'), text('bb'), face]),
+  };
+  const seen = { true: 0, false: 0 };
+  for (let nodes = 2; nodes <= 8; nodes++) for (let depth = 1; depth <= 5; depth++) for (const bytes of [40, 64, 96, 128, 1024]) {
+    const limits = { exports: 4, nodes, depth, bytes };
+    for (const [name, v] of Object.entries(values)) {
+      const frames = [];
+      const sender = new Scope(new Namespace('x'), [text('s')], { send: async (_p, f) => { frames.push(f); } }, limits);
+      const receiver = new Scope(new Namespace('x'), [text('r')], { send: async () => {} }, limits);
+      const ref = receiver.expose(new Endpoint(4));
+      let accepted = true;
+      try { await sender.connect(ref).send(v); } catch (e) { if (e.reason !== 'limit') throw e; accepted = false; }
+      seen[accepted]++;
+      let frame = frames[0];
+      if (!accepted) {
+        const open = new Scope(new Namespace('x'), [text('s')], { send: async (_p, f) => { frame = f; } }, { exports: 4, nodes: 1 << 20, depth: 1 << 10, bytes: 1 << 20 });
+        await open.connect(ref).send(v);
+      }
+      let received = true;
+      try { receiver.deliver(receiver.path, frame, undefined); } catch (e) { if (e.reason !== 'limit') throw e; received = false; }
+      assert.equal(received, accepted, `${name} at nodes ${nodes} depth ${depth} bytes ${bytes}`);
+    }
+  }
+  assert.ok(seen.true > 0 && seen.false > 0, JSON.stringify(seen));
+});

@@ -205,6 +205,13 @@ export const DEFAULT_LIMITS: Limits = Object.freeze({ exports: 64, nodes: 4096, 
 
 interface Budget { nodes: number; bytes: number }
 
+/**
+ * The node, depth and byte bounds count the hydrated value, identically when
+ * sending and receiving (D8): each atom, tuple and Wire leaf is one node at its
+ * tuple depth; bytes are atom bytes plus each Wire leaf's reference material.
+ */
+const refBytes = (path: Path): number => path.reduce((n, a) => n + a.length, 32);
+
 /** One participant's hydration state for one incarnation (Terms). */
 export class Scope {
   readonly path: Path;
@@ -307,12 +314,12 @@ export class Scope {
     }
     if (v instanceof Endpoint) return this._encode(v.wire, depth, staged, b);
     if (v instanceof Face) {
-      this.#spend(b, depth, 0);
+      this.#spend(b, depth, refBytes(this.path));
       return refValue({ path: this.path, scope: this.token, id: this.#exportId(owners.get(v)!, staged) });
     }
     if (v instanceof Proxy) {
       if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
-      this.#spend(b, depth, 0);
+      this.#spend(b, depth, refBytes(v.ref.path));
       return refValue(v.ref);
     }
     if (v && typeof (v as Wire).send === 'function') throw new Refusal(UNEXPORTABLE);
@@ -342,14 +349,14 @@ export class Scope {
     if (v.length !== 2) throw new Refusal(MALFORMED_FRAME);
     const [tag, payload] = v.items();
     if (!(tag instanceof Atom) || tag.length !== 1) throw new Refusal(MALFORMED_FRAME);
-    this.#spend(b, depth, 0);
     if (tag.equals(TUPLE_TAG)) {
       if (!(payload instanceof Tuple)) throw new Refusal(MALFORMED_FRAME);
+      this.#spend(b, depth, 0);
       return hydratedTuple(payload.items().map((c) => this._decode(c, depth + 1, interned, b)));
     }
     if (tag.equals(WIRE_TAG)) {
       const ref = readReference(payload!, this.#limits.depth);
-      for (const a of [...ref.path, ref.scope, ref.id]) this.#spend(b, depth + 1, a.length);
+      this.#spend(b, depth, refBytes(ref.path));
       return this.#import(ref, interned);
     }
     throw new Refusal(MALFORMED_FRAME);
