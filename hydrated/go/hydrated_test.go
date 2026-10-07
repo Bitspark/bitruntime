@@ -899,6 +899,56 @@ func TestObservation17EndpointLaws(t *testing.T) {
 	}
 }
 
+// The first termination is final: a receiver that fails after Close, while it
+// was running, leaves the endpoint closed, and the export stays withdrawn.
+// Reproduced by Fiber Composition's final review at 6817e40.
+func TestTerminationIsFinalAfterClose(t *testing.T) {
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, nil, DefaultLimits)
+	e := NewEndpoint(1)
+	entered, proceed, left := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	if _, err := e.Receive(func(wire.HydratedValue, wire.ReceivedContext) {
+		close(entered)
+		<-proceed
+		defer close(left)
+		panic("late receiver failure")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ref, _ := s.Expose(e)
+	if err := s.Deliver(s.path, ontos.NewTuple(header, ref.Scope, ref.ID, text("x")), nil); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	_ = e.Close()
+	<-e.Closed()
+	closed := e.Termination()
+	if closed.Kind != "closed" || s.Live() != 0 {
+		t.Fatalf("after Close: %+v with %d live exports", closed, s.Live())
+	}
+	close(proceed)
+	<-left
+	for deadline := time.Now().Add(100 * time.Millisecond); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if now := e.Termination(); now != closed {
+			t.Fatalf("termination changed after Closed: %+v, then %+v", closed, now)
+		}
+	}
+	if err := s.Deliver(s.path, ontos.NewTuple(header, ref.Scope, ref.ID, text("y")), nil); !errors.Is(err, UnknownExport) {
+		t.Fatalf("after termination: %v", err)
+	}
+
+	// And the other order: a failure first stays the termination after Close.
+	failing := NewEndpoint(1)
+	if _, err := failing.Receive(func(wire.HydratedValue, wire.ReceivedContext) { panic("receiver fault") }); err != nil {
+		t.Fatal(err)
+	}
+	_ = failing.Send(text("x"))
+	<-failing.Closed()
+	_ = failing.Close()
+	if got := failing.Termination(); got.Kind != "failed" {
+		t.Fatalf("a failed endpoint reports %+v after Close", got)
+	}
+}
+
 // Observation 15, symmetry: under the same bounds, the sender accepts a value
 // exactly when the receiver does, at tight node, depth and byte budgets.
 func TestObservation15SenderAndReceiverCountAlike(t *testing.T) {

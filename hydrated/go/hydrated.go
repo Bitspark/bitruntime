@@ -167,8 +167,8 @@ type Endpoint struct {
 	queue   []delivery
 	limit   int
 	handler func(wire.HydratedValue, wire.ReceivedContext)
-	gen     uint64 // receiver generation: a detach removes only its own receiver
-	failure error  // set when a receiver failed and so terminated the endpoint
+	gen     uint64           // receiver generation: a detach removes only its own receiver
+	end     wire.Termination // the first termination, final once closed is set
 	closed  bool
 	done    chan struct{}
 	wake    chan struct{}
@@ -246,17 +246,12 @@ func (e *Endpoint) Receive(handler func(wire.HydratedValue, wire.ReceivedContext
 
 // Termination reports how the endpoint ended, as bitwire's Endpoint contract
 // does: "failed" with the receiver's failure, or "closed". It is the zero value
-// while the endpoint is open, and stable once Closed is closed.
+// while the endpoint is open. The first termination is final: it is set before
+// Closed is closed, and a receiver failing after Close leaves it "closed".
 func (e *Endpoint) Termination() wire.Termination {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	switch {
-	case e.failure != nil:
-		return wire.Termination{Kind: "failed", Message: e.failure.Error()}
-	case e.closed:
-		return wire.Termination{Kind: "closed"}
-	}
-	return wire.Termination{}
+	return e.end
 }
 
 // Closed is closed when the endpoint closes.
@@ -264,12 +259,20 @@ func (e *Endpoint) Closed() <-chan struct{} { return e.done }
 
 // Close ends the endpoint and withdraws its export from every scope.
 func (e *Endpoint) Close() error {
+	e.terminate(wire.Termination{Kind: "closed"})
+	return nil
+}
+
+// terminate ends the endpoint once: the first termination, by Close or by a
+// receiver failure, is the one reported, and later ones change nothing.
+func (e *Endpoint) terminate(end wire.Termination) {
 	e.mu.Lock()
 	if e.closed {
 		e.mu.Unlock()
-		return nil
+		return
 	}
 	e.closed = true
+	e.end = end
 	exports := e.exports
 	e.exports = map[*Scope]ontos.Atom{}
 	e.queue = nil
@@ -278,7 +281,6 @@ func (e *Endpoint) Close() error {
 	for s, id := range exports {
 		s.withdraw(e, id)
 	}
-	return nil
 }
 
 func (e *Endpoint) admit(v wire.HydratedValue, ctx wire.ReceivedContext) error {
@@ -316,11 +318,9 @@ func (e *Endpoint) dispatch() {
 			e.queue = e.queue[1:]
 			e.mu.Unlock()
 			if err := deliverTo(h, d); err != nil {
-				// A receiver failure terminates the endpoint, which ends its export.
-				e.mu.Lock()
-				e.failure = err
-				e.mu.Unlock()
-				_ = e.Close()
+				// A receiver failure terminates the endpoint, which ends its
+				// export, unless the endpoint has already ended.
+				e.terminate(wire.Termination{Kind: "failed", Message: err.Error()})
 				return
 			}
 		}

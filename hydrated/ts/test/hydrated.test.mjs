@@ -226,6 +226,28 @@ test('observation 17: Endpoint laws on every path', async () => {
   assert.deepEqual(await quiet.closed, { kind: 'closed' });
 });
 
+// The first termination is final: a receiver that fails after its endpoint was
+// closed leaves it closed, as Go's TestTerminationIsFinalAfterClose shows.
+test('the first termination is final', async () => {
+  const s = new Scope(new Namespace('x'), [text('a')], { send: async () => {} });
+  const e = new Endpoint(1);
+  e.receive(() => { void e.close(); throw new Error('late receiver failure'); });
+  const ref = s.expose(e);
+  s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('x')]), undefined);
+  assert.deepEqual(await e.closed, { kind: 'closed' });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(e.termination, { kind: 'closed' });
+  assert.equal(s.live, 0);
+  assert.throws(() => s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('y')]), undefined), (err) => err.reason === UNKNOWN_EXPORT);
+
+  const failing = new Endpoint(1);
+  failing.receive(() => { throw new Error('receiver fault'); });
+  await failing.send(text('x'));
+  assert.equal((await failing.closed).kind, 'failed');
+  await failing.close();
+  assert.equal(failing.termination.kind, 'failed');
+});
+
 test('observation 15, symmetry: sender and receiver count a value alike', async () => {
   const face = new Endpoint(1);
   let nested = text('x');

@@ -1,9 +1,10 @@
 # Working here as an agent
 
-Read [CHARTER.md](CHARTER.md), [the current realization](docs/WIRE-RUNTIME.md), and
+Read [CHARTER.md](CHARTER.md), [the baseline realization](docs/WIRE-RUNTIME.md), [the hydrated layer](hydrated/README.md), and
 bitwire decision 0015 with its wire/carrier contracts at the pinned dependency.
 Read [the composition plan](docs/COMPOSITION.md) before adding routing across
-instances, multiplexing, wire export or stream carriers. Its pending protocol
+instances, multiplexing or stream carriers; wire export is the hydrated layer
+(bitwire decision 0019). Its pending protocol
 decisions are prerequisites, not implemented APIs or permission to infer laws.
 
 - Implement addressless Endpoints in carriers and one reusable addressed layer above them. Wire grants sending; Endpoint adds receive/close ownership; WireNode adds complete structure. Change missing or incorrect laws in bitwire first.

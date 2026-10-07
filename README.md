@@ -66,4 +66,4 @@ node scripts/hydrated-interop.mjs
 node scripts/package-smoke.mjs
 ```
 
-Tests use bitwire-owned observations, independent bytes, native carrier failures, TLS, resource release and cross-language peers. Packed-consumer tests install into a fresh project. [RELEASING.md](RELEASING.md) defines the public Go tag and GitHub package asset process. [The realization record](docs/WIRE-RUNTIME.md) states the contract and evidence.
+Tests use bitwire-owned observations, independent bytes, native carrier failures, TLS, resource release and cross-language peers. Packed-consumer tests install into a fresh project. [RELEASING.md](RELEASING.md) defines the public Go tag and GitHub package asset process. [The realization record](docs/WIRE-RUNTIME.md) states the 0.6.0 baseline's contract and evidence; [hydrated/README.md](hydrated/README.md) states the hydrated layer's.
