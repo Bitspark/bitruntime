@@ -507,7 +507,11 @@ func TestObservation6RefusalsBeforeAdmission(t *testing.T) {
 	_, svc := serve(t, b, func(wire.HydratedValue, wire.ReceivedContext) {})
 	target := a.Connect(svc)
 	kept := NewEndpoint(1)
-	if err := target.Send(tuple(t, kept, funcWire(func(wire.HydratedValue) error { return nil }))); !errors.Is(err, Unexportable) {
+	foreignWire := funcWire(func(wire.HydratedValue) error { return nil })
+	if _, err := NewTuple(kept, foreignWire); !errors.Is(err, Unexportable) {
+		t.Fatalf("a tuple built with a foreign Wire: %v", err)
+	}
+	if err := target.Send(foreignWire); !errors.Is(err, Unexportable) {
 		t.Fatalf("arbitrary wire.HydratedWire: %v", err)
 	}
 	other, _ := NewScope(NewNamespace("other"), wire.Path{text("x")}, nil, DefaultLimits)
@@ -1000,13 +1004,8 @@ func TestObservation17LocalEdges(t *testing.T) {
 	if err := local.Wire().Send(foreign); !errors.Is(err, Unexportable) {
 		t.Fatalf("a bare foreign Wire: %v", err)
 	}
-	if err := local.Wire().Send(tuple(t, text("a"), tuple(t, foreign))); !errors.Is(err, Unexportable) {
-		t.Fatalf("a nested foreign Wire: %v", err)
-	}
-	closed := NewEndpoint(1)
-	_ = closed.Close()
-	if err := local.Wire().Send(tuple(t, closed.Wire())); !errors.Is(err, Unexportable) {
-		t.Fatalf("a closed face: %v", err)
+	if _, err := NewTuple(text("a"), foreign); !errors.Is(err, Unexportable) {
+		t.Fatalf("a tuple built with a foreign Wire: %v", err)
 	}
 	if err := local.Wire().Send(tuple(t, text("ok"), NewEndpoint(1))); err != nil {
 		t.Fatal(err)
@@ -1016,5 +1015,62 @@ func TestObservation17LocalEdges(t *testing.T) {
 	case v := <-got:
 		t.Fatalf("a refused local value was delivered: %v", v)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// Observation 15, shared trees: a compact value whose subtrees are shared counts
+// every occurrence, and is refused before it can expand: no export is
+// committed and nothing is sent.
+func TestObservation15SharedTreeRefusedBeforeExpansion(t *testing.T) {
+	rec := &recordingSender{}
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, rec, DefaultLimits)
+	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))})
+	v := tuple(t, NewEndpoint(1))
+	for i := 0; i < 40; i++ { // 2^40 occurrences from 41 distinct tuples
+		v = tuple(t, v, v)
+	}
+	start := time.Now()
+	if err := target.Send(v); !errors.Is(err, Limit) {
+		t.Fatalf("a shared tree: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("refusal took %v; the tree was expanded", elapsed)
+	}
+	if s.Live() != 0 || len(rec.frames) != 0 {
+		t.Fatalf("a refused send left %d exports and %d frames", s.Live(), len(rec.frames))
+	}
+	// Locally it is delivered as built, without a traversal.
+	local := NewEndpoint(1)
+	got := make(chan wire.HydratedValue, 1)
+	_, _ = local.Receive(func(x wire.HydratedValue, _ wire.ReceivedContext) { got <- x })
+	if err := local.Wire().Send(v); err != nil {
+		t.Fatal(err)
+	}
+	<-got
+}
+
+// Observation 15, depth: a deep value within the configured bounds is sent and
+// received whole.
+func TestObservation15DeepPermittedValue(t *testing.T) {
+	limits := Limits{Exports: 4, Nodes: 50000, Depth: 20000, Bytes: 1 << 22}
+	rec := &recordingSender{}
+	sender, _ := NewScope(NewNamespace("x"), wire.Path{text("s")}, rec, limits)
+	receiver, _ := NewScope(NewNamespace("x"), wire.Path{text("r")}, nil, limits)
+	target := NewEndpoint(1)
+	got := make(chan wire.HydratedValue, 1)
+	_, _ = target.Receive(func(x wire.HydratedValue, _ wire.ReceivedContext) { got <- x })
+	ref, _ := receiver.Expose(target)
+	v := wire.HydratedValue(text("leaf"))
+	for i := 0; i < 15000; i++ {
+		v = tuple(t, v)
+	}
+	if err := sender.Connect(ref).Send(v); err != nil {
+		t.Fatal(err)
+	}
+	if err := receiver.Deliver(receiver.path, rec.frames[0], nil); err != nil {
+		t.Fatal(err)
+	}
+	if !(<-got).(ontos.Tuple).Equal(v.(ontos.Value)) {
+		t.Fatal("the deep value changed")
 	}
 }

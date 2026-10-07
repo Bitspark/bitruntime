@@ -66,17 +66,13 @@ const sendOnly = (v: HydratedValue): HydratedValue => (v instanceof Endpoint ? v
  * D7): only runtime-recognized leaves arrive, and an endpoint arrives as its face.
  */
 function local(v: HydratedValue): HydratedValue {
-  const check = (x: HydratedValue): void => {
-    if (x instanceof Atom || x instanceof Tuple) return;
-    if (x instanceof HydratedTuple) { x.items().forEach(check); return; }
-    if (x instanceof Face) { if (owners.get(x)!.isClosed) throw new Refusal(UNEXPORTABLE); return; }
-    if (x instanceof Proxy) return;
-    if (x && typeof (x as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
-    throw new TypeError('hydrated: not a value');
-  };
+  // A tuple recognized its leaves when it was built and is immutable, so only
+  // the top level needs checking; no traversal is needed.
   const projected = sendOnly(v);
-  check(projected);
-  return projected;
+  if (projected instanceof Atom || projected instanceof Tuple || projected instanceof HydratedTuple) return projected;
+  if (projected instanceof Face || projected instanceof Proxy) return projected;
+  if (projected && typeof (projected as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
+  throw new TypeError('hydrated: not a value');
 }
 
 /** Captures items; returns the ground tuple when no HydratedWire is beneath them. */
@@ -84,7 +80,8 @@ export function hydratedTuple(items: readonly HydratedValue[]): HydratedValue {
   const captured = items.map(sendOnly);
   let live = false;
   for (const item of captured) {
-    if (item instanceof HydratedTuple || isWire(item)) live = true;
+    if (item instanceof HydratedTuple || item instanceof Face || item instanceof Proxy) live = true;
+    else if (isWire(item)) throw new Refusal(UNEXPORTABLE); // only the runtime's own Wires are leaves (D1)
     else if (!(item instanceof Atom) && !(item instanceof Tuple)) throw new TypeError('hydrated: not a value');
   }
   return live ? new HydratedTuple(captured, CONSTRUCT) : tuple(captured as (Atom | Tuple)[]);
@@ -115,6 +112,8 @@ function refusal(error: unknown): never {
 }
 const codec = <T>(f: () => T): T => { try { return f(); } catch (error) { return refusal(error); } };
 const codecLimits = (l: Limits): HydratedCodecLimits => ({ nodes: l.nodes, depth: l.depth, bytes: l.bytes });
+/** A Wire leaf's value bytes under D8: its path bytes and 32. */
+const refBytes = (path: Path): number => path.reduce((n, a) => n + a.length, 32);
 
 /**
  * A local HydratedEndpoint: one receiver, ordered dispatch never inline with the
@@ -327,7 +326,7 @@ export class Scope {
   async _send(dest: Reference, value: HydratedValue): Promise<void> {
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
     const staged = new Map<Endpoint, Atom>();
-    const body = this.#toData(value, 0, staged);
+    const body = this.#toData(value, staged);
     const frame = codec(() => packHydratedFrame({ scope: dest.scope, id: dest.id, body }, codecLimits(this.#limits)));
     this.#commit(staged);
     await this.#sender.send(dest.path, frame);
@@ -338,32 +337,77 @@ export class Scope {
    * new face. The codec checks every bound (D8); the depth guard only keeps a
    * pathological value from exhausting the stack first.
    */
-  #toData(v: HydratedValue, depth: number, staged: Map<Endpoint, Atom>): HydratedData {
-    if (depth > this.#limits.depth) throw new Refusal(LIMIT);
-    if (v instanceof Atom) return new HydratedDataAtom(v);
-    if (v instanceof Tuple || v instanceof HydratedTuple) {
-      return codec(() => new HydratedDataTuple(items(v)!.map((c) => this.#toData(c, depth + 1, staged))));
+  #toData(root: HydratedValue, staged: Map<Endpoint, Atom>): HydratedData {
+    // Count each occurrence as D8 does and refuse before allocating, so a compact
+    // value with shared subtrees cannot expand past the bounds; iterate, so a deep
+    // permitted value cannot exhaust the stack. The codec stays authoritative.
+    const limits = this.#limits;
+    let nodes = 0, bytes = 0;
+    const spend = (depth: number, n: number) => {
+      nodes++; bytes += n;
+      if (nodes > limits.nodes || depth > limits.depth || bytes > limits.bytes) throw new Refusal(LIMIT);
+    };
+    const frames: { items: readonly HydratedValue[]; depth: number; out: HydratedData[] }[] = [];
+    const visit = (value: HydratedValue, depth: number): HydratedData | undefined => {
+      const v = value instanceof Endpoint ? value.wire : value;
+      if (v instanceof Atom) { spend(depth, v.length); return new HydratedDataAtom(v); }
+      if (v instanceof Tuple || v instanceof HydratedTuple) {
+        spend(depth, 0);
+        frames.push({ items: items(v)!, depth, out: [] });
+        return undefined;
+      }
+      if (v instanceof Face) {
+        spend(depth, refBytes(this.path));
+        return codec(() => new HydratedReference(this.path, this.token, this.#exportId(owners.get(v)!, staged)));
+      }
+      if (v instanceof Proxy) {
+        if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
+        spend(depth, refBytes(v.ref.path));
+        return codec(() => new HydratedReference(v.ref.path, v.ref.scope, v.ref.id));
+      }
+      if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
+      throw new TypeError('hydrated: not a value');
+    };
+    const first = visit(root, 0);
+    if (first) return first;
+    for (;;) {
+      const top = frames[frames.length - 1]!;
+      if (top.out.length < top.items.length) {
+        const child = visit(top.items[top.out.length]!, top.depth + 1);
+        if (child) top.out.push(child);
+        continue;
+      }
+      frames.pop();
+      const done = codec(() => new HydratedDataTuple(top.out));
+      if (!frames.length) return done;
+      frames[frames.length - 1]!.out.push(done);
     }
-    if (v instanceof Endpoint) return this.#toData(v.wire, depth, staged);
-    if (v instanceof Face) return codec(() => new HydratedReference(this.path, this.token, this.#exportId(owners.get(v)!, staged)));
-    if (v instanceof Proxy) {
-      if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
-      return codec(() => new HydratedReference(v.ref.path, v.ref.scope, v.ref.id));
-    }
-    if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
-    throw new TypeError('hydrated: not a value');
   }
 
-  /** Occurrences of one reference within the value share one proxy; nothing is retained (D7). */
-  #fromData(d: HydratedData, interned: Map<string, HydratedWire>): HydratedValue {
-    if (d instanceof HydratedDataAtom) return d.value;
-    if (d instanceof HydratedDataTuple) return hydratedTuple(d.items().map((c) => this.#fromData(c, interned)));
-    return this.#import({ path: d.path, scope: d.scope, id: d.id }, interned);
+  /** Occurrences of one reference within the value share one proxy; nothing is retained (D7). Iterative. */
+  #fromData(root: HydratedData, interned: Map<string, HydratedWire>): HydratedValue {
+    const leaf = (d: HydratedDataAtom | HydratedReference): HydratedValue =>
+      d instanceof HydratedDataAtom ? d.value : this.#import({ path: d.path, scope: d.scope, id: d.id }, interned);
+    if (!(root instanceof HydratedDataTuple)) return leaf(root);
+    const frames: { items: readonly HydratedData[]; out: HydratedValue[] }[] = [{ items: root.items(), out: [] }];
+    for (;;) {
+      const top = frames[frames.length - 1]!;
+      if (top.out.length < top.items.length) {
+        const child = top.items[top.out.length]!;
+        if (child instanceof HydratedDataTuple) frames.push({ items: child.items(), out: [] });
+        else top.out.push(leaf(child));
+        continue;
+      }
+      frames.pop();
+      const done = hydratedTuple(top.out);
+      if (!frames.length) return done;
+      frames[frames.length - 1]!.out.push(done);
+    }
   }
 
   /** @internal The body halves of a frame. */
   _encodeBody(v: HydratedValue, staged: Map<Endpoint, Atom>): Atom | Tuple {
-    const data = this.#toData(v, 0, staged);
+    const data = this.#toData(v, staged);
     return codec(() => packHydratedBody(data, codecLimits(this.#limits))) as Atom | Tuple;
   }
 

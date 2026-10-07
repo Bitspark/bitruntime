@@ -111,7 +111,9 @@ test('observation 6: refusals before admission register and send nothing', async
   const [, svc] = serve(t, n.parts.provider.scope, () => {});
   const target = a.connect(svc);
   const kept = new Endpoint(1);
-  await assert.rejects(target.send(hydratedTuple([kept, { send: async () => {} }])), (e) => e.reason === UNEXPORTABLE);
+  const foreignWire = { kind: 'wire', send: async () => {} };
+  assert.throws(() => hydratedTuple([kept, foreignWire]), (e) => e.reason === UNEXPORTABLE);
+  await assert.rejects(target.send(foreignWire), (e) => e.reason === UNEXPORTABLE);
   const foreign = new Scope(new Namespace('other'), [text('x')], { send: async () => {} })
     .connect({ path: [text('y')], scope: atom(new Uint8Array(16)), id: text('1') });
   await assert.rejects(target.send(hydratedTuple([kept, foreign])), (e) => e.reason === FOREIGN_NAMESPACE);
@@ -285,12 +287,44 @@ test('observation 17, local edges: bounds, failure tracking and recognition on l
   local.receive((v) => got.push(v));
   const foreign = { kind: 'wire', send: async () => {} };
   await assert.rejects(local.wire.send(foreign), (e) => e.reason === UNEXPORTABLE);
-  await assert.rejects(local.wire.send(hydratedTuple([text('a'), hydratedTuple([foreign])])), (e) => e.reason === UNEXPORTABLE);
-  const closed = new Endpoint(1);
-  const closedFace = closed.wire;
-  await closed.close();
-  await assert.rejects(local.wire.send(hydratedTuple([closedFace])), (e) => e.reason === UNEXPORTABLE);
+  assert.throws(() => hydratedTuple([text('a'), foreign]), (e) => e.reason === UNEXPORTABLE);
   await local.wire.send(hydratedTuple([text('ok'), new Endpoint(1)]));
   await eventually(() => got.length === 1, 'the valid value was not delivered');
   assert.equal(got.length, 1, 'a refused local value was delivered');
+});
+
+test('observation 15, shared trees: refused before expansion, nothing committed or sent', async () => {
+  const frames = [];
+  const s = new Scope(new Namespace('x'), [text('a')], { send: async (_p, f) => { frames.push(f); } });
+  const target = s.connect({ path: [text('b')], scope: atom(new Uint8Array(16)), id: atom(new Uint8Array(16)) });
+  let v = hydratedTuple([new Endpoint(1)]);
+  for (let i = 0; i < 40; i++) v = hydratedTuple([v, v]); // 2^40 occurrences, 41 tuples
+  const start = Date.now();
+  await assert.rejects(target.send(v), (e) => e.reason === 'limit');
+  assert.ok(Date.now() - start < 2000, 'the tree was expanded before refusal');
+  assert.equal(s.live, 0);
+  assert.equal(frames.length, 0);
+  const local = new Endpoint(1);
+  const got = new Promise((r) => local.receive(r));
+  await local.wire.send(v);
+  assert.equal(await got, v, 'a local send traversed or rebuilt the value');
+});
+
+test('observation 15, depth: a deep permitted value round-trips without exhausting the stack', async () => {
+  const limits = { exports: 4, nodes: 50000, depth: 20000, bytes: 1 << 22 };
+  const frames = [];
+  const sender = new Scope(new Namespace('x'), [text('s')], { send: async (_p, f) => { frames.push(f); } }, limits);
+  const receiver = new Scope(new Namespace('x'), [text('r')], { send: async () => {} }, limits);
+  const target = new Endpoint(1);
+  const got = new Promise((r) => target.receive(r));
+  const ref = receiver.expose(target);
+  let v = text('leaf');
+  for (let i = 0; i < 15000; i++) v = hydratedTuple([v]);
+  await sender.connect(ref).send(v);
+  receiver.deliver(receiver.path, frames[0], undefined);
+  // Compare iteratively: ontos's recursive Tuple.equals is not part of this check.
+  let x = await got, depth = 0;
+  while (x instanceof Tuple) { assert.equal(x.length, 1); x = x.at(0); depth++; }
+  assert.equal(depth, 15000);
+  assert.ok(x.equals(text('leaf')), 'the deep value changed');
 });

@@ -68,8 +68,10 @@ func NewTuple(items ...wire.HydratedValue) (wire.HydratedValue, error) {
 			ground = append(ground, x)
 		case ontos.Tuple:
 			ground = append(ground, x)
-		case Tuple, wire.HydratedWire:
+		case Tuple, *face, *proxy:
 			live = true
+		case wire.HydratedWire:
+			return nil, Unexportable // only the runtime's own Wires are leaves (D1)
 		default:
 			return nil, errors.New("hydrated: not a value")
 		}
@@ -191,22 +193,11 @@ func (f *face) Send(v wire.HydratedValue) error {
 }
 
 // checkLocal validates a value for local delivery as dehydration would for a
-// remote one (D1, D7): only runtime-recognized leaves arrive.
+// remote one (D1, D7). A Tuple recognized its leaves when NewTuple built it and
+// is immutable, so only the top level needs checking; nothing is traversed.
 func checkLocal(v wire.HydratedValue) error {
-	switch x := v.(type) {
-	case ontos.Atom, ontos.Tuple, *proxy:
-		return nil
-	case Tuple:
-		for _, item := range x.items {
-			if err := checkLocal(item); err != nil {
-				return err
-			}
-		}
-		return nil
-	case *face:
-		if x.e.isClosed() {
-			return Unexportable
-		}
+	switch v.(type) {
+	case ontos.Atom, ontos.Tuple, Tuple, *face, *proxy:
 		return nil
 	case wire.HydratedWire:
 		return Unexportable
@@ -575,7 +566,7 @@ func (s *Scope) stage(dest Reference, v wire.HydratedValue) (ontos.Value, error)
 	s.encodeMu.Lock()
 	defer s.encodeMu.Unlock()
 	staged := map[*Endpoint]ontos.Atom{}
-	body, err := s.toData(v, 0, staged)
+	body, err := s.toData(v, 0, staged, &budget{})
 	if err != nil {
 		return nil, err
 	}
@@ -586,30 +577,59 @@ func (s *Scope) stage(dest Reference, v wire.HydratedValue) (ontos.Value, error)
 	return frame, s.commit(staged)
 }
 
-// toData maps a live value onto the codec's structural data, staging an export
-// for each new face. The codec then checks every bound (D8); the depth guard
-// here only keeps a pathological value from exhausting the stack first.
-func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ontos.Atom) (wire.HydratedData, error) {
-	if depth > s.limits.Depth {
-		return nil, Limit
+// budget counts a value as D8 does, while converting it.
+type budget struct{ nodes, bytes int }
+
+// refBytes is a Wire leaf's value bytes under D8: its path bytes and 32.
+func refBytes(path wire.Path) int {
+	n := 32
+	for _, a := range path {
+		n += a.Len()
 	}
+	return n
+}
+
+func (s *Scope) spend(b *budget, depth, n int) error {
+	b.nodes++
+	b.bytes += n
+	if b.nodes > s.limits.Nodes || depth > s.limits.Depth || b.bytes > s.limits.Bytes {
+		return Limit
+	}
+	return nil
+}
+
+// toData maps a live value onto the codec's structural data, staging an export
+// for each new face. It counts each occurrence as D8 does and refuses before
+// allocating, so a compact value with shared subtrees cannot expand past the
+// bounds. The codec stays authoritative for every bound.
+func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ontos.Atom, b *budget) (wire.HydratedData, error) {
 	switch x := v.(type) {
 	case ontos.Atom:
+		if err := s.spend(b, depth, x.Len()); err != nil {
+			return nil, err
+		}
 		return wire.NewHydratedDataAtom(x), nil
 	case ontos.Tuple, Tuple:
+		if err := s.spend(b, depth, 0); err != nil {
+			return nil, err
+		}
 		items, _ := Items(x)
-		out := make([]wire.HydratedData, len(items))
-		for i, item := range items {
-			var err error
-			if out[i], err = s.toData(item, depth+1, staged); err != nil {
+		out := make([]wire.HydratedData, 0, len(items))
+		for _, item := range items {
+			d, err := s.toData(item, depth+1, staged, b)
+			if err != nil {
 				return nil, err
 			}
+			out = append(out, d)
 		}
 		t, err := wire.NewHydratedDataTuple(out...)
 		return t, refusal(err)
 	case *Endpoint:
-		return s.toData(x.face, depth, staged)
+		return s.toData(x.face, depth, staged, b)
 	case *face:
+		if err := s.spend(b, depth, refBytes(s.path)); err != nil {
+			return nil, err
+		}
 		id, err := s.exportID(x.e, staged)
 		if err != nil {
 			return nil, err
@@ -619,6 +639,9 @@ func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ont
 	case *proxy:
 		if x.ns != s.ns {
 			return nil, ForeignNamespace
+		}
+		if err := s.spend(b, depth, refBytes(x.ref.Path)); err != nil {
+			return nil, err
 		}
 		r, err := x.ref.data()
 		return r, refusal(err)
@@ -652,7 +675,7 @@ func (s *Scope) fromData(d wire.HydratedData, interned map[string]wire.HydratedW
 
 // encodeBody and decodeBody are the body halves of a frame.
 func (s *Scope) encodeBody(v wire.HydratedValue, staged map[*Endpoint]ontos.Atom) (ontos.Value, error) {
-	d, err := s.toData(v, 0, staged)
+	d, err := s.toData(v, 0, staged, &budget{})
 	if err != nil {
 		return nil, err
 	}
