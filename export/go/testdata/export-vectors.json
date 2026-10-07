@@ -1,28 +1,19 @@
 {
   "basis": "Decision 0018 and docs/wire/export.md. Encoded bytes are hand-derived from ontos-codec-v1 (Atom=00 length bytes, Tuple=01 arity items) with the 13-octet reference header bitwire/ref/1 and the 19-octet addressed header, then checked against the released 0.5.0 encoder. The export root [x] is an example of a root a composition declares; it is not reserved. Scopes are 16-byte atoms and ids are ASCII decimal. Atoms are hex. The table and lifetime expectations precede any implementation.",
   "encode": [
-    {"name": "reference 1 in scope a0", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}, {"atom": "31"}]},
-     "hex": "0103000d626974776972652f7265662f310010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf000131"},
-    {"name": "the same id in another scope", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"atom": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf"}, {"atom": "31"}]},
-     "hex": "0103000d626974776972652f7265662f310010b0b1b2b3b4b5b6b7b8b9babbbcbdbebf000131"},
-    {"name": "send hello through reference 1 under root [x]", "path": ["78", "73656e64", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "31"], "message": {"atom": "68656c6c6f"},
-     "hex": "01030013626974776972652f6164647265737365642f310104000178000473656e640010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf000131000568656c6c6f"},
-    {"name": "release reference 1 under root [x]", "path": ["78", "72656c65617365", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "31"], "message": {"tuple": []},
-     "hex": "01030013626974776972652f6164647265737365642f310104000178000772656c656173650010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf0001310100"}
+    {"name": "reference 1 in scope a0", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"},{"atom": "31"}]}, "hex": "0103000d626974776972652f7265662f310010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf000131"},
+    {"name": "the same id in another scope", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"atom": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf"},{"atom": "31"}]}, "hex": "0103000d626974776972652f7265662f310010b0b1b2b3b4b5b6b7b8b9babbbcbdbebf000131"},
+    {"name": "send hello through reference 1 under root [x]", "path": ["78", "73656e64", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "31"], "message": {"atom": "68656c6c6f"}, "hex": "01030013626974776972652f6164647265737365642f310104000178000473656e640010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf000131000568656c6c6f"},
+    {"name": "release reference 1 under root [x]", "path": ["78", "72656c65617365", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "31"], "message": {"tuple": []}, "hex": "01030013626974776972652f6164647265737365642f310104000178000772656c656173650010a0a1a2a3a4a5a6a7a8a9aaabacadaeaf0001310100"}
   ],
   "rejectReference": [
-    {"name": "wrong label", "value": {"tuple": [{"atom": "626974776972652f5265662f31"}, {"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}, {"atom": "31"}]}},
-    {"name": "no scope", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"atom": "31"}]}},
-    {"name": "id is a tuple", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}, {"tuple": []}]}},
-    {"name": "scope is a tuple", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"tuple": []}, {"atom": "31"}]}},
-    {"name": "extra item", "value": {"tuple": [{"atom": "626974776972652f7265662f31"}, {"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"}, {"atom": "31"}, {"atom": ""}]}}
+    {"name": "wrong label", "value": {"tuple": [{"atom": "626974776972652f5265662f31"},{"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"},{"atom": "31"}]}},
+    {"name": "no scope", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"atom": "31"}]}},
+    {"name": "id is a tuple", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"},{"tuple": []}]}},
+    {"name": "scope is a tuple", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"tuple": []},{"atom": "31"}]}},
+    {"name": "extra item", "value": {"tuple": [{"atom": "626974776972652f7265662f31"},{"atom": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"},{"atom": "31"},{"atom": ""}]}}
   ],
-  "table": {
-    "scope": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
-    "live": ["31", "32"],
-    "released": ["33"],
-    "comment": "Paths are relative to the side's export root. A send delivers its message to the export's target once; a release removes the export; refusals are observed by the exporting side's host only."
-  },
+  "table": {"scope": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "live": ["31", "32"], "released": ["33"], "comment": "Paths are relative to the side's export root. A send delivers its message to the export's target once; a release removes the export; refusals are observed by the exporting side's host only."},
   "deliveries": [
     {"name": "send to a live export", "path": ["73656e64", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "31"], "expect": {"deliver": "31"}},
     {"name": "send to another live export", "path": ["73656e64", "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf", "32"], "expect": {"deliver": "32"}},
@@ -42,6 +33,7 @@
     "An export's id is never reused within its scope: after id 1 is released, the next export in that scope has a new id, and a reference with id 1 is refused unknown-reference.",
     "Two connections whose tables both issue id 1: a reference from one, copied onto the other, is refused foreign-reference there, even while that side's own id 1 is live.",
     "A new connection at the same place is a new scope: references issued in the old scope are refused foreign-reference and never reach an export of the new one.",
+    "Swapping back: a reference received on a connection whose scope is the receiving side's own table scope there is imported as the registered target itself while the export is live, and a send reaches the target without crossing the connection; once that export has ended, sends through such an import are refused locally as unknown-reference and nothing is sent.",
     "Release removes only the forwarding association. It never closes, releases or refuses the target Wire, and the target stays usable by its other holders.",
     "When a connection ends, every export in its scope ends, and every re-export whose source import came from that connection retires: later sends to them are refused unknown-reference on the side that issued them.",
     "Fan-out: one import re-exported on two connections stays imported while either re-export is live. Releasing one re-export sends no upstream release, and a send through the surviving branch still reaches the original target. Releasing the last dependent sends exactly one upstream release.",

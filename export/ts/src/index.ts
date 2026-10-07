@@ -110,6 +110,12 @@ export class Table {
     return ref;
   }
 
+  /** @internal The registered target for a returned reference, if live. */
+  target(id: Atom): Wire | undefined { return this.#entries.get(key(id))?.target; }
+
+  /** @internal */
+  refuseLocal(reason: string, path: Path): void { this.#refuse(reason, path); }
+
   #refuse(reason: string, path: Path): void { this.onRefuse?.(reason, path); }
 }
 
@@ -118,15 +124,23 @@ export class Imported {
   readonly importer: Importer;
   readonly scope: Atom;
   readonly id: Atom;
+  readonly returned: boolean;
   #dependents = 0;
   #ended = false;
   #retirees: Array<() => void> = [];
 
-  constructor(importer: Importer, scope: Atom, id: Atom, root: AddressedWire) {
+  constructor(importer: Importer, scope: Atom, id: Atom, root: AddressedWire, local?: Table) {
     this.importer = importer;
     this.scope = scope;
     this.id = id;
-    this.wire = bind(root, [SEND, scope, id]);
+    this.returned = !!local && scope.equals(local.scope);
+    if (local && this.returned) {
+      // The peer returned this side's own reference: swap back to the live Wire.
+      const path = [SEND, scope, id];
+      this.wire = local.target(id) ?? { send: async () => { local.refuseLocal(UNKNOWN_REFERENCE, path); throw new Error(UNKNOWN_REFERENCE); } };
+    } else {
+      this.wire = bind(root, [SEND, scope, id]);
+    }
   }
 
   /** Adds a dependent; the returned release drops it. The last release sends one upstream release. */
@@ -140,7 +154,8 @@ export class Imported {
       if (this.#dependents === 0 && !this.#ended) {
         this.#ended = true;
         this.importer.forget(this);
-        void this.importer.root.send([RELEASE, this.scope, this.id], tuple([])).catch(() => {});
+        // A swapped-back import never ends this side's own export.
+        if (!this.returned) void this.importer.root.send([RELEASE, this.scope, this.id], tuple([])).catch(() => {});
       }
     };
   }
@@ -166,14 +181,20 @@ export class Importer {
   #imports = new Set<Imported>();
   #closed = false;
 
-  /** sender is this side's addressed sender on the connection; peerRoot the peer's export root. */
-  constructor(sender: AddressedWire, peerRoot: Path) { this.root = under(sender, peerRoot); }
+  readonly #local?: Table;
+
+  /** sender is this side's addressed sender on the connection, peerRoot the peer's
+   * export root, and local this side's own table on the same connection, if any. */
+  constructor(sender: AddressedWire, peerRoot: Path, local?: Table) {
+    this.root = under(sender, peerRoot);
+    this.#local = local;
+  }
 
   /** Imports a reference; grants send only and validates nothing. */
   import(ref: Value): Imported {
     if (this.#closed) throw new ExportScopeEndedError();
     const { scope, id } = parseReference(ref);
-    const imported = new Imported(this, scope, id, this.root);
+    const imported = new Imported(this, scope, id, this.root, this.#local);
     this.#imports.add(imported);
     return imported;
   }

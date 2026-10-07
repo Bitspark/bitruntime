@@ -12,7 +12,7 @@ import {
 // export/go/testdata/export-vectors.json is bitwire's corpus at record commit
 // f0f72525048971d98e299154532c4734f89b9042, pinned by hash for both languages.
 const raw = readFileSync(new URL('../../go/testdata/export-vectors.json', import.meta.url));
-assert.equal(createHash('sha256').update(raw).digest('hex'), '2b8bd52d06493d752d3c962e9fd5ac62c00da72e54071c8cd3efeb9e092064f0');
+assert.equal(createHash('sha256').update(raw).digest('hex'), 'dc6513a7aca5cfd9271bf31dbaae0cb34b1c198fea60ee16d1d0cf83f8f7f512');
 const v = JSON.parse(raw);
 const hex = (b) => Buffer.from(b).toString('hex');
 const a = (h) => atom(Buffer.from(h, 'hex'));
@@ -78,7 +78,8 @@ function connect() {
   const [x, y] = pair();
   const mk = (e) => {
     const ep = addressed(e);
-    const s = { ep, table: new Table(8), importer: new Importer(ep, ROOT), refused: [] };
+    const table = new Table(8);
+    const s = { ep, table, importer: new Importer(ep, ROOT, table), refused: [] };
     s.table.onRefuse = (reason) => s.refused.push(reason);
     return s;
   };
@@ -168,4 +169,22 @@ test('ids are never reused; release never closes the target; the table is bounde
   const ref2 = tb.export(target);
   assert.ok(!parseReference(ref1).id.equals(parseReference(ref2).id));
   assert.notEqual(new Table(1).scope.bytes().toString(), tb.scope.bytes().toString());
+});
+
+test('a returned reference is swapped back to the registered Wire', async () => {
+  const [a1, b1] = connect();
+  listen(a1); listen(b1);
+  const target = recorder();
+  const ref = a1.table.export(target);
+  const back = a1.importer.import(ref);
+  assert.equal(back.wire, target, 'not swapped back');
+  const release = back.hold();
+  await back.wire.send(text('home'));
+  assert.equal(target.got.length, 1);
+  release();
+  await tick();
+  assert.equal(a1.table.live, 1, 'releasing a swapped-back import ended the export');
+  a1.table.withdraw(ref);
+  await assert.rejects(a1.importer.import(ref).wire.send(text('late')));
+  assert.deepEqual(a1.refused, [UNKNOWN_REFERENCE]);
 });

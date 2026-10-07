@@ -182,18 +182,33 @@ func (t *Table) refuse(reason string, path wire.Path) {
 	}
 }
 
-// Importer turns references received from the peer into send-only proxies.
+// Importer turns references received from the peer into live Wires: proxies for
+// the peer's exports, or this side's own registered Wire for a reference the
+// peer returns.
 type Importer struct {
 	mu      sync.Mutex
 	root    wire.AddressedWire
+	local   *Table
 	imports map[*Imported]struct{}
 	closed  bool
 }
 
 // NewImporter serves one side: sender is its addressed sender on the
-// connection, peerRoot the peer's declared export root.
-func NewImporter(sender wire.AddressedWire, peerRoot wire.Path) *Importer {
-	return &Importer{root: core.Under(sender, peerRoot), imports: map[*Imported]struct{}{}}
+// connection, peerRoot the peer's declared export root, and local this side's
+// own table on the same connection (nil if it exports nothing).
+func NewImporter(sender wire.AddressedWire, peerRoot wire.Path, local *Table) *Importer {
+	return &Importer{root: core.Under(sender, peerRoot), local: local, imports: map[*Imported]struct{}{}}
+}
+
+// refusedWire refuses every send locally, for a returned reference whose export ended.
+type refusedWire struct {
+	table *Table
+	path  wire.Path
+}
+
+func (w refusedWire) Send(ontos.Value) error {
+	w.table.refuse(UnknownReference, w.path)
+	return errors.New(UnknownReference)
 }
 
 // Imported is one import with its dependents.
@@ -201,6 +216,7 @@ type Imported struct {
 	importer   *Importer
 	scope, id  ontos.Atom
 	proxy      wire.Wire
+	returned   bool // swapped back to this side's own export: no upstream release
 	mu         sync.Mutex
 	dependents int
 	ended      bool
@@ -218,6 +234,19 @@ func (m *Importer) Import(ref ontos.Value) (*Imported, error) {
 	defer m.mu.Unlock()
 	if m.closed {
 		return nil, ErrClosed
+	}
+	if m.local != nil && scope.Equal(m.local.scope) {
+		// The peer returned this side's own reference: swap back to the live Wire.
+		m.local.mu.Lock()
+		e := m.local.entries[string(id.Bytes())]
+		m.local.mu.Unlock()
+		var target wire.Wire = refusedWire{m.local, wire.Path{sendVerb, scope, id}}
+		if e != nil {
+			target = e.target
+		}
+		i := &Imported{importer: m, scope: scope, id: id, proxy: target, returned: true}
+		m.imports[i] = struct{}{}
+		return i, nil
 	}
 	i := &Imported{importer: m, scope: scope, id: id, proxy: core.Bind(m.root, wire.Path{sendVerb, scope, id})}
 	m.imports[i] = struct{}{}
@@ -247,7 +276,9 @@ func (i *Imported) drop() {
 	i.mu.Unlock()
 	if last {
 		i.importer.forget(i)
-		_ = i.importer.root.Send(wire.Path{relVerb, i.scope, i.id}, ontos.NewTuple())
+		if !i.returned { // a swapped-back import never ends this side's own export
+			_ = i.importer.root.Send(wire.Path{relVerb, i.scope, i.id}, ontos.NewTuple())
+		}
 	}
 }
 

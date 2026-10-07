@@ -14,8 +14,8 @@ import (
 )
 
 // testdata/export-vectors.json is bitwire's corpus at the record's commit
-// f0f72525048971d98e299154532c4734f89b9042, copied unchanged.
-const vectorsSHA256 = "2b8bd52d06493d752d3c962e9fd5ac62c00da72e54071c8cd3efeb9e092064f0"
+// (its revision with the swap-back rule; see the PR history), copied unchanged.
+const vectorsSHA256 = "dc6513a7aca5cfd9271bf31dbaae0cb34b1c198fea60ee16d1d0cf83f8f7f512"
 
 type vectors struct {
 	Encode []struct {
@@ -220,7 +220,7 @@ func connect(t *testing.T) (*side, *side, *core.PairEndpoint) {
 	mk := func(e *core.PairEndpoint) *side {
 		tb, _ := NewTable(8)
 		ep := core.Addressed(e)
-		s := &side{ep: ep, table: tb, importer: NewImporter(ep, root), refused: make(chan string, 8)}
+		s := &side{ep: ep, table: tb, importer: NewImporter(ep, root, tb), refused: make(chan string, 8)}
 		tb.OnRefuse = func(reason string, _ wire.Path) { s.refused <- reason }
 		return s
 	}
@@ -458,4 +458,40 @@ func TestReleaseAndBound(t *testing.T) {
 	if _, err := tb.Export(target); err != nil {
 		t.Fatal("the released slot was not available")
 	}
+}
+
+// A reference the peer returns is swapped back to the registered Wire itself,
+// and releasing that import never ends this side's own export.
+func TestSwapBack(t *testing.T) {
+	a, b, _ := connect(t)
+	a.listen(t, nil)
+	b.listen(t, nil)
+	target := newRecorder()
+	ref, _ := a.table.Export(target)
+	back, err := a.importer.Import(ref) // b returned a's reference to a
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.Wire() != wire.Wire(target) {
+		t.Fatal("a returned reference was not swapped back to the registered Wire")
+	}
+	release := back.Hold()
+	_ = back.Wire().Send(ontos.NewAtom([]byte("home")))
+	if v := within(t, target.got); !v.Equal(ontos.NewAtom([]byte("home"))) {
+		t.Fatalf("got %v", v)
+	}
+	release()
+	time.Sleep(20 * time.Millisecond)
+	if a.table.Live() != 1 {
+		t.Fatal("releasing a swapped-back import ended the export")
+	}
+	a.table.Withdraw(ref)
+	stale, _ := a.importer.Import(ref)
+	if err := stale.Wire().Send(ontos.NewTuple()); err == nil {
+		t.Fatal("a returned reference to an ended export was accepted")
+	}
+	if reason := within(t, a.refused); reason != UnknownReference {
+		t.Fatalf("reason %s", reason)
+	}
+	quiet(t, target.got, "delivery after withdrawal")
 }
