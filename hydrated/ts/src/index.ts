@@ -39,9 +39,14 @@ const TUPLE_TAG = atom([1]);
 const WIRE_TAG = atom([2]);
 
 /** A tuple with at least one Wire beneath it; see hydratedTuple (D1). */
+/** Only this module constructs hydrated tuples, so every one is canonical (D1, D7). */
+const CONSTRUCT = Symbol('hydrated tuple');
+
+/** A tuple with at least one Wire beneath it. Construct it with hydratedTuple(). */
 export class HydratedTuple {
   readonly items: readonly Value[];
-  constructor(items: readonly Value[]) {
+  constructor(items: readonly Value[], token?: symbol) {
+    if (token !== CONSTRUCT) throw new TypeError('hydrated: construct tuples with hydratedTuple()');
     this.items = Object.freeze([...items]);
     Object.freeze(this);
   }
@@ -61,7 +66,7 @@ export function hydratedTuple(items: readonly Value[]): Value {
     if (item instanceof HydratedTuple || isWire(item)) live = true;
     else if (!(item instanceof Atom) && !(item instanceof Tuple)) throw new TypeError('hydrated: not a value');
   }
-  return live ? new HydratedTuple(captured) : tuple(captured as (Atom | Tuple)[]);
+  return live ? new HydratedTuple(captured, CONSTRUCT) : tuple(captured as (Atom | Tuple)[]);
 }
 
 /** Any tuple's items, ground or hydrated. */

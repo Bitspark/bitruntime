@@ -88,10 +88,16 @@ func NewTuple(items ...Value) (Value, error) {
 	return ontos.NewTuple(ground...), nil
 }
 
-// sendOnly projects an Endpoint to its sending face.
+// sendOnly projects an Endpoint to its sending face, and the zero Tuple, the
+// only one NewTuple does not make, to the ground empty tuple (D1, D7).
 func sendOnly(v Value) Value {
-	if e, ok := v.(*Endpoint); ok {
-		return e.face
+	switch x := v.(type) {
+	case *Endpoint:
+		return x.face
+	case Tuple:
+		if x.items == nil {
+			return ontos.NewTuple()
+		}
 	}
 	return v
 }

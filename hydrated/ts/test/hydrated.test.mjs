@@ -250,3 +250,18 @@ test('observation 15, symmetry: sender and receiver count a value alike', async 
   }
   assert.ok(seen.true > 0 && seen.false > 0, JSON.stringify(seen));
 });
+
+test('observation 17, construction: the exported tuple class cannot bypass projection', async () => {
+  const { HydratedTuple } = await import('../../../dist/hydrated/ts/src/index.js');
+  const priv = new Endpoint(1);
+  assert.throws(() => new HydratedTuple([priv]), /hydratedTuple/);
+  assert.throws(() => new HydratedTuple([text('ground')]), /hydratedTuple/);
+  const got = [];
+  const local = new Endpoint(4);
+  local.receive((v) => got.push(v));
+  await local.wire.send(hydratedTuple([hydratedTuple([priv]), text('x')]));
+  await eventually(() => got.length === 1, 'not delivered');
+  const inner = items(items(got[0])[0])[0];
+  assert.equal(inner, priv.wire, 'a nested endpoint kept its authority');
+  assert.ok(hydratedTuple([text('a')]) instanceof Tuple, 'a tuple without a Wire is not ground');
+});

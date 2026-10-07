@@ -936,3 +936,15 @@ func TestObservation15LongReferencePath(t *testing.T) {
 		t.Fatal("the long path changed")
 	}
 }
+
+// Observation 17, construction: the zero Tuple, the only one NewTuple does not
+// make, arrives as the ground empty tuple.
+func TestObservation17ZeroTupleIsGround(t *testing.T) {
+	got := make(chan Value, 1)
+	local := NewEndpoint(1)
+	_, _ = local.Receive(func(v Value, _ Context) { got <- v })
+	_ = local.Wire().Send(Tuple{})
+	if v, ok := (<-got).(ontos.Tuple); !ok || v.Len() != 0 {
+		t.Fatal("the zero hydrated tuple was not delivered as the ground empty tuple")
+	}
+}
