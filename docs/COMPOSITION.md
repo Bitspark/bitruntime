@@ -1,12 +1,14 @@
 # Runtime composition plan
 
-**Status, 7 October 2026:** implementation plan. Its exported-Wire facility is
-implemented in bitruntime 0.7.0 as the hydrated layer; routing, multiplexing and
-the stream carrier remain planned, with no runtime code or API.
-The released baseline is bitruntime 0.6.0 with bitwire 0.5.0. The current
-[realization record](WIRE-RUNTIME.md) describes that implementation. bitruntime
-0.7.0, with bitwire 0.6.0, adds the hydrated layer (`hydrated/{go,ts}`), which
-realizes the exported-Wire facility as bitwire decision 0019. The
+**Status, 7 October 2026:** the published release is bitruntime 0.7.1 with
+bitwire 0.6.0. Its hydrated layer (`hydrated/{go,ts}`) realizes the exported-Wire
+facility as bitwire decision 0019. Routing, multiplexing and the stream carrier
+remain planned here, with no reusable runtime code or API.
+The [baseline realization record](WIRE-RUNTIME.md) describes the earlier
+bitruntime 0.6.0 / bitwire 0.5.0 foundation. The hydrated implementation first
+landed in 0.7.0; 0.7.1 fixes its release consumer check and supplies the verified
+public package. [The hydrated realization](../hydrated/README.md#public-release-evidence)
+records the delivered revision and public consumer evidence. The
 [bitwire composition architecture](https://github.com/Bitspark/bitwire/blob/main/docs/wire/composition.md)
 owns the target semantics and acceptance obligations; this page owns how
 bitruntime should realize them. Future protocol records must settle the pending
