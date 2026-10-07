@@ -142,7 +142,7 @@ func (r Reference) Payload() ontos.Value {
 }
 
 // ReadReference reads a reference payload.
-func ReadReference(v ontos.Value) (Reference, error) { return readReference(v, DefaultLimits.Depth) }
+func ReadReference(v ontos.Value) (Reference, error) { return readReference(v) }
 
 func (r Reference) key() string {
 	k := strconv.Itoa(len(r.Path))
@@ -657,7 +657,7 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 		}
 		return NewTuple(items...)
 	case tag.Equal(wireTag):
-		r, err := readReference(t.At(1), s.limits.Depth)
+		r, err := readReference(t.At(1))
 		if err != nil {
 			return nil, err
 		}
@@ -669,13 +669,15 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 	return nil, MalformedFrame
 }
 
-func readReference(v ontos.Value, maxDepth int) (Reference, error) {
+// readReference reads a reference payload. Path segments are reference material:
+// they count toward the byte bound, not as nodes or depth (D8).
+func readReference(v ontos.Value) (Reference, error) {
 	t, ok := v.(ontos.Tuple)
 	if !ok || t.Len() != 3 {
 		return Reference{}, MalformedFrame
 	}
 	p, ok := t.At(0).(ontos.Tuple)
-	if !ok || p.Len() > maxDepth {
+	if !ok {
 		return Reference{}, MalformedFrame
 	}
 	path := make(wire.Path, p.Len())

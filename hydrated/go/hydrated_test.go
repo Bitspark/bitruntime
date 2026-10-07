@@ -770,7 +770,7 @@ func TestObservation13ConcurrentSends(t *testing.T) {
 	registered := s.byEndpoint[face]
 	for _, f := range rec.frames {
 		leaf := f.(ontos.Tuple).At(3).(ontos.Tuple).At(1).(ontos.Tuple).At(0) // body (01, ((02, ref)))
-		ref, err := readReference(leaf.(ontos.Tuple).At(1), DefaultLimits.Depth)
+		ref, err := readReference(leaf.(ontos.Tuple).At(1))
 		if err != nil || !ref.ID.Equal(registered) {
 			t.Fatal("a frame names an id that was not registered")
 		}
@@ -915,4 +915,24 @@ func TestObservation15SenderAndReceiverCountAlike(t *testing.T) {
 		t.Fatalf("the budgets never separated outcomes: %v", seen)
 	}
 	t.Logf("accepted %d, refused %d", seen[true], seen[false])
+}
+
+// Observation 15, paths: a reference path longer than the depth bound is
+// reference material, counted in bytes, not refused as depth (D8).
+func TestObservation15LongReferencePath(t *testing.T) {
+	limits := Limits{Exports: 4, Nodes: 8, Depth: 2, Bytes: 4096}
+	receiver, _ := NewScope(NewNamespace("x"), wire.Path{text("r")}, nil, limits)
+	target := NewEndpoint(4)
+	got := make(chan Value, 1)
+	_, _ = target.Receive(func(v Value, _ Context) { got <- v })
+	ref, _ := receiver.Expose(target)
+	long := wire.Path{text("a"), text("b"), text("c"), text("d"), text("e")}
+	far := Reference{long, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))}
+	body := ontos.NewTuple(tupleTag, ontos.NewTuple(far.value()))
+	if err := receiver.Deliver(receiver.path, ontos.NewTuple(header, ref.Scope, ref.ID, body), nil); err != nil {
+		t.Fatalf("a five-segment reference under depth 2: %v", err)
+	}
+	if v := <-got; !wire.PathEqual(items(t, v)[0].(*proxy).ref.Path, long) {
+		t.Fatal("the long path changed")
+	}
 }

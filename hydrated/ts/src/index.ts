@@ -355,7 +355,7 @@ export class Scope {
       return hydratedTuple(payload.items().map((c) => this._decode(c, depth + 1, interned, b)));
     }
     if (tag.equals(WIRE_TAG)) {
-      const ref = readReference(payload!, this.#limits.depth);
+      const ref = readReference(payload!);
       this.#spend(b, depth, refBytes(ref.path));
       return this.#import(ref, interned);
     }
@@ -377,10 +377,11 @@ export class Scope {
 }
 
 /** Reads a reference payload ((path...), scope, id). */
-export function readReference(v: Atom | Tuple, maxDepth: number = DEFAULT_LIMITS.depth): Reference {
+/** Path segments are reference material: they count toward the byte bound, not as nodes or depth (D8). */
+export function readReference(v: Atom | Tuple): Reference {
   if (!(v instanceof Tuple) || v.length !== 3) throw new Refusal(MALFORMED_FRAME);
   const [p, scope, id] = v.items();
-  if (!(p instanceof Tuple) || p.length > maxDepth) throw new Refusal(MALFORMED_FRAME);
+  if (!(p instanceof Tuple)) throw new Refusal(MALFORMED_FRAME);
   const path = p.items().map((s) => { if (!(s instanceof Atom)) throw new Refusal(MALFORMED_FRAME); return s; });
   if (!(scope instanceof Atom) || !(id instanceof Atom) || scope.length !== 16 || id.length !== 16) throw new Refusal(MALFORMED_FRAME);
   return Object.freeze({ path: Object.freeze(path), scope, id });
