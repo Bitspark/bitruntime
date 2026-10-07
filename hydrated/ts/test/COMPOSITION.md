@@ -62,8 +62,8 @@ to the owning contract/implementation, not hidden by fixture fallback behavior.
 This is bounded evidence for these APIs, schedules and carriers. It does not
 establish a law for every generic type, arbitrary partitions, distributed
 collection, cross-namespace gateways or cross-language domain protocols. The
-earlier `spikes/hydration` call-64 retention counterexample remains historical
-evidence. The owning production change still requires its full Go/TypeScript,
+earlier hydration spike's call-64 retention counterexample (bitruntime `4ead83f`,
+since removed) remains historical evidence. The owning production change still requires its full Go/TypeScript,
 package and interoperability gates and independent review.
 
 Run `npm ci --ignore-scripts`, `npm run check`, and `npm test` at the repository
