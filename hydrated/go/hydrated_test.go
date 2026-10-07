@@ -58,7 +58,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// --- vectors (bitwire#83 revision 2, pinned by hash) ---
+// --- vectors (bitwire#83 accepted at 6e33fb3, pinned by hash) ---
 
 type jsonValue map[string]json.RawMessage
 
@@ -97,7 +97,7 @@ func TestObservation1VectorsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum := sha256.Sum256(raw); hex.EncodeToString(sum[:]) != "ce6b9f0f45db9c64627bbc1ba007344a8b4dde44297cc771431a7bc122546e6f" {
+	if sum := sha256.Sum256(raw); hex.EncodeToString(sum[:]) != "9d5f684871d1b56719b33bdff3114a101d2a7a1a8702d1f4474303df0e109312" {
 		t.Fatal("vectors changed; repin to the reviewed bitwire record")
 	}
 	var v struct {

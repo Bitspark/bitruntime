@@ -15,6 +15,6 @@ The [TypeScript mirror](ts/src/index.ts) repeats observations 1-4, 6-10, 15 and 
 serving Go. Both peers build from this repository, not from fresh published
 dependencies, so they show the grammar interoperates, not package delivery.
 
-The record's vectors are copied from bitwire#83 (revision 2) into
+The record's vectors are copied from bitwire#83 (accepted, at 6e33fb3) into
 [testdata](go/testdata/hydrated-vectors.json), pinned by sha256; both languages
 replay them.

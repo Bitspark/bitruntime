@@ -11,9 +11,9 @@ import {
 } from '../../../dist/hydrated/ts/src/index.js';
 import { text, str, eventually, PATHS, tree, serve, call } from './harness.mjs';
 
-test('observation 1: vectors round-trip (bitwire#83 revision 2, pinned)', () => {
+test('observation 1: vectors round-trip (bitwire#83 accepted at 6e33fb3, pinned)', () => {
   const raw = readFileSync(new URL('../../go/testdata/hydrated-vectors.json', import.meta.url));
-  assert.equal(createHash('sha256').update(raw).digest('hex'), 'ce6b9f0f45db9c64627bbc1ba007344a8b4dde44297cc771431a7bc122546e6f');
+  assert.equal(createHash('sha256').update(raw).digest('hex'), '9d5f684871d1b56719b33bdff3114a101d2a7a1a8702d1f4474303df0e109312');
   const v = JSON.parse(raw);
   const from = (x) => ('atom' in x ? atom(Buffer.from(x.atom, 'hex')) : tuple(x.tuple.map(from)));
   const wires = (x) => (x instanceof Atom || x instanceof Tuple ? 0 : (items(x)?.reduce((n, c) => n + wires(c), 0) ?? 1));
