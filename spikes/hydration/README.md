@@ -49,7 +49,7 @@ Forwarding an imported proxy preserves its reference rather than registering
 a proxy of that proxy. Its representation is send-only: it grants neither
 Endpoint receiving nor carrier close ownership.
 
-The 13 observations in [the hydration tests](ts/test/hydration.test.mjs) cover this
+The 14 observations in [the hydration tests](ts/test/hydration.test.mjs) cover this
 recursive exchange over local pairs and actual loopback WebSockets, data that
 resembles a reference, aliasing, exact empty/binary/slash-containing path atoms,
 replacement at the same route, withdrawal, carrier-bound scope cleanup, failed
@@ -57,7 +57,7 @@ encoding/decoding and finite value, registry and active-work limits. The stale
 reference test deliberately reuses an export ID at the same route in a new
 scope; it observes refusal and no call to the replacement target.
 
-Local Windows validation passed all 15 hydration and composition observations
+Local Windows validation passed all 16 hydration and composition observations
 with Node 24.21.0 after type checking. CI repeats both suites on Linux and
 Windows. Exact reviewed commits and CI runs belong in the pull request; this source-level account does not imply
 that a later revision has passed. Existing repository CI remains required.
@@ -147,6 +147,16 @@ uses bounded retention and explicit owner withdrawal as the experiment's
 policy. Distributed release/collection for long-lived scopes remains a concrete
 production requirement. It must be derived from ownership and delegation, not
 hidden in the domain adapter or guessed from JavaScript garbage collection.
+
+**Observed limit:** with the fixture's default limits, one long-lived caller
+using one callback completes 63 Echo calls; call 64 rejects with `export limit`.
+Both ends then retain 64 exports and 64 imports. Every completed call has left
+its reply and continuation associations in those scopes. The adapters have no
+reference bookkeeping with which to end a finished reply. The regression
+observation records this limit explicitly: bounded retention demonstrates the
+construction but is not adequate reclamation for a long-running service.
+The production contract must derive a usable target lifetime and import policy
+while retaining the domain adapter boundary.
 
 Encoding and decoding stage registry changes until the entire value validates.
 Exports are registered before bytes are admitted so a fast reply can find them.

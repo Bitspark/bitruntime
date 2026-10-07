@@ -94,6 +94,17 @@ for (const carrier of ['pair', 'websocket']) {
 
 const reference = () => ({ path: rightPath, scope: atom(new Uint8Array(16)), id: bytes('1') });
 
+test('long-lived Echo stops at call 64: scope retention is not production reclamation', async t => {
+  const network = await tree(t, 'pair');
+  const callback = wire(() => {});
+  const api = echoFromWire(network.left.connect(network.right.expose(provideEcho())));
+  for (let i = 0; i < 63; i++) await api.echo(bytes('retained until scope close'), callback);
+  await assert.rejects(api.echo(bytes('64th call'), callback), /export limit/);
+  assert.deepEqual(network.left.retained, { exports: 64, imports: 64 });
+  assert.deepEqual(network.right.retained, { exports: 64, imports: 64 });
+  assert.deepEqual(network.faults, []);
+});
+
 test('failed encoding is atomic; registry limits apply to nested and distinct Wires', async () => {
   const sent = [];
   const host = new Hydration(leftPath, { send: async (p, v) => { sent.push([p, v]); } }, { exports: 1 });
