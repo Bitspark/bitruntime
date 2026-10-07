@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.0
+
+- Require bitwire 0.6.0, with its public hydrated declarations and shared pure
+  hydrated codec.
+- Add `hydrated/{go,ts}` (TypeScript subpath `/hydrated`), the realization of
+  bitwire decision 0019, the hydrated wire protocol's first edition.
+  - Messages may carry live Wires. References are `(owner path, scope, id)`,
+    with 16-octet unpredictable ids, valid end to end in one namespace.
+  - Exports are bound to a local Endpoint's lifetime. An endpoint travels only
+    as its sending face, on every path. Liveness is judged on send.
+  - Received context is delivered beside the value.
+  - Endpoint termination is bitwire's `Termination`. A receiver failure ends
+    the endpoint and its export.
+  - The shared codec owns the grammar and bounds. Conversion counts each
+    occurrence and refuses before allocating, so a compact value with shared
+    subtrees, a wide tuple or a repeated reference path cannot grow past the
+    bounds.
+- CI and release run the Go/TypeScript hydrated interoperability. The package
+  and Go smokes exercise the hydrated layer from installed artifacts.
+- Add the composition conformance suite (Cell, Text, Counter).
+- Remove the hydration spike.
+
 ## 0.6.0
 
 - Restore addressless Wire sending and Endpoint ownership under bitwire 0.5.0.

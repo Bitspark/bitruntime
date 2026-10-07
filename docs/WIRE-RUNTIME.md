@@ -1,5 +1,12 @@
 # Layered wire realization
 
+**Scope:** this record is the bitruntime 0.6.0 baseline: addressless endpoints,
+the addressed facade, local pairs and WebSocket over bitwire 0.5.0. bitruntime
+0.7.0 keeps that baseline unchanged and adds the hydrated layer, which carries
+exported live Wires as bitwire decision 0019 specifies; its record is
+[hydrated/README.md](../hydrated/README.md). Statements below about what is
+absent describe the 0.6.0 baseline.
+
 **Target decided 2026-10-05; implemented.** This
 realizes bitwire decision 0015 and deixis's structural identity under the owner's cross-repository
 correction. It replaces the generic envelope realization without retaining its
@@ -91,7 +98,8 @@ These are the two implemented runtime languages. The other bitwire presentations
 declare interfaces and check package consumption; no concrete tree implementation
 or cross-package runtime conformance is claimed for them. Their first concrete
 implementations must run the same structural observations. Multi-hop relays,
-mount-crossing exchanges, cancellation and exported live wires remain absent:
+mount-crossing exchanges, cancellation and exported live wires remain absent
+(exported live Wires arrive in 0.7.0 as the hydrated layer; see the scope above):
 their R25b lifecycle/relay families are required when their separately specified
 protocols are introduced, under decision 0015's triggers. Existing endpoint
 queue saturation, close and disconnect checks are not evidence for a relay chain.

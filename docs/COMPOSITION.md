@@ -1,8 +1,12 @@
 # Runtime composition plan
 
-**Status, 7 October 2026:** implementation plan, with no new runtime code or API.
+**Status, 7 October 2026:** implementation plan. Its exported-Wire facility is
+implemented in bitruntime 0.7.0 as the hydrated layer; routing, multiplexing and
+the stream carrier remain planned, with no runtime code or API.
 The released baseline is bitruntime 0.6.0 with bitwire 0.5.0. The current
-[realization record](WIRE-RUNTIME.md) describes that implementation. The
+[realization record](WIRE-RUNTIME.md) describes that implementation. bitruntime
+0.7.0, with bitwire 0.6.0, adds the hydrated layer (`hydrated/{go,ts}`), which
+realizes the exported-Wire facility as bitwire decision 0019. The
 [bitwire composition architecture](https://github.com/Bitspark/bitwire/blob/main/docs/wire/composition.md)
 owns the target semantics and acceptance obligations; this page owns how
 bitruntime should realize them. Future protocol records must settle the pending
@@ -30,9 +34,9 @@ at the peer. These are cooperating facilities, not aliases for one operation.
 | Proposed stream component | Read/write framing, decode bounds, shutdown and concrete stream bindings. | A new bitwire stream-framing contract. |
 | Proposed routing component | Explicit mount registration, dispatch/forwarding, binding generations, return-route bindings and bounded route state. | A specified routing/mount profile; no implicit changes to DeixisNode selection. |
 | Proposed multiplexing component | Open/accept/refuse logical connections, own the carrier receive attachment, manage channel state/queues and release. | A specified bitwire multiplexing protocol. |
-| Proposed reference component | Export/import Wire references, forward sends, reject stale references and release registry entries. | A specified bitwire wire-export protocol. |
+| Reference component, implemented in 0.7.0 as `hydrated/{go,ts}` | Export/import Wire references inside hydrated values, forward sends, refuse stale and unknown references, and end exports with their endpoints. | bitwire decision 0019 (`bitwire/hydrated/1`) and bitwire 0.6.0's public declarations and pure codec. |
 
-Names and public signatures for proposed components remain to be selected.
+Names and public signatures for the remaining proposed components remain to be selected.
 Follow component-first paths and the two runtime languages when code is added.
 Reuse endpoint machinery where semantics match; do not copy an old RPC engine,
 envelope interface or second generic Wire. bitwire supplies meaning, canonical
@@ -89,6 +93,13 @@ A proxy grants Wire.send, not Endpoint ownership. Duplicate exports, re-export
 through another instance and release/send races require stated outcomes. A
 channel per exported Wire is optional; examine addressed reference routing first.
 
+bitruntime 0.7.0 realizes export as decision 0019 states it. References are
+end-to-end `(owner path, scope, id)` with unpredictable ids, valid within one
+namespace, so transit participants keep no export state and forwarding copies a
+reference. An export lives exactly as long as its local Endpoint. No channel per
+exported Wire and no multiplexed logical Endpoint is involved. Gateways between
+namespaces are not defined.
+
 ### Both composition orders
 
 | Composition | Mechanism | Additional requirement |
@@ -108,7 +119,7 @@ equivalent to one concatenated path.
 | --- | --- |
 | 1. Protocol records | bitwire records routing/mounts, multiplexing, wire export and composition choices, expected outcomes and independent vectors. Each implementation follows its own settled record. |
 | 2. Routing realization | Implement explicit bindings and routing in Go and TypeScript; demonstrate local then multi-process traversal, cross-branch replies under a declared service convention, refusal and stale-binding isolation. |
-| 3. Multiplexing and exports | Implement logical endpoints and export/import against the protocols. Exercise endpoint observations plus allocation, authority, aliasing, release and aggregate resource cases. |
+| 3. Multiplexing and exports | Implement logical endpoints and export/import against the protocols. Exercise endpoint observations plus allocation, authority, aliasing, release and aggregate resource cases. Export is delivered in 0.7.0 (the hydrated layer); multiplexing remains. |
 | 4. Additional carrier | Define stream framing in bitwire and implement a TCP/TLS binding. Verify arbitrary chunks, EOF/truncation, limits and release. This can proceed alongside stages 2 and 3 after its own contract exists. |
 | 5. Combined consumer | Run the same machinery over local, WebSocket and the new stream carrier, in both language roles and fresh packaged consumers. Then a host or `Pages<Wire>` consumer can adopt it explicitly. |
 
@@ -141,8 +152,12 @@ Add these separately reported families:
 - Native Go/TypeScript observations, Go race checks, cross-language and
   multi-process runs, and independently installed public package consumers.
 
-These new families are unrun. Existing 0.6.0 endpoint checks do not establish
-multi-hop safety, multiplexing or capability transfer. A documentation CI pass
+The export family runs in 0.7.0: decision 0019's observations in Go and
+TypeScript, its independent vectors, the composition conformance suite and
+Go/TypeScript hydrated interoperability ([hydrated/README.md](../hydrated/README.md)).
+Its multi-hop cases run around an opaque test router, not a deployed host. The
+routing, multiplexing and stream families remain unrun. Existing endpoint checks
+do not establish multi-hop routing safety or multiplexing. A documentation CI pass
 does not change that status. Each delivered stage must name its exact source,
 protocol version, environments, observations and remaining limits here or in its
 linked realization record before a release claims it.

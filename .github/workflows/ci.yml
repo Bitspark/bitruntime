@@ -36,3 +36,4 @@ jobs:
       - run: npm test
       - run: node scripts/package-smoke.mjs
       - run: node scripts/interop.mjs
+      - run: node scripts/hydrated-interop.mjs
