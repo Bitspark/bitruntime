@@ -8,7 +8,13 @@ branch is not proposed for merge until the record is accepted. The
 run the record's observations 1-13 around an opaque middle router, over local
 pairs and WebSocket where the carrier matters.
 
+The [TypeScript mirror](ts/src/index.ts) repeats observations 1-4 and 6-9
+([tests](ts/test/hydrated.test.mjs)), with 2, 3, 4 and 7 over both carriers.
+[scripts/hydrated-interop.mjs](../scripts/hydrated-interop.mjs) runs observation
+14 over a real WebSocket in both roles, Go serving TypeScript and TypeScript
+serving Go. Both peers build from this repository, not from fresh published
+dependencies, so they show the grammar interoperates, not package delivery.
+
 The record's vectors are copied from bitwire#83 at `20a6b6b` into
-[testdata](go/testdata/hydrated-vectors.json), pinned by sha256. Observation 14
-(Go and TypeScript peers with fresh published dependencies) needs a TypeScript
-realization and is not run here.
+[testdata](go/testdata/hydrated-vectors.json), pinned by sha256; both languages
+replay them.

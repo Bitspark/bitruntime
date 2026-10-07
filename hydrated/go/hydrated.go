@@ -121,6 +121,15 @@ func (r Reference) value() ontos.Value {
 	return ontos.NewTuple(wireTag, ontos.NewTuple(ontos.NewTuple(segments...), r.Scope, r.ID))
 }
 
+// Payload is the reference's ground payload ((path...), scope, id), for
+// composition bootstrap over ground data.
+func (r Reference) Payload() ontos.Value {
+	return r.value().(ontos.Tuple).At(1)
+}
+
+// ReadReference reads a reference payload.
+func ReadReference(v ontos.Value) (Reference, error) { return readReference(v, DefaultLimits.Depth) }
+
 func (r Reference) key() string {
 	k := strconv.Itoa(len(r.Path))
 	for _, a := range r.Path {
