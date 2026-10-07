@@ -3,7 +3,7 @@
 **Status, 7 October 2026:** disposable TypeScript experiment for
 [issue 39](https://github.com/Bitspark/bitruntime/issues/39). This is evidence for
 the contract owners, not a released API, a production bitnode router, or an
-accepted protocol. The root package exports and Ontos value definitions are
+accepted protocol. The root package exports and ontos value definitions are
 unchanged. Production work still follows the
 [composition plan](../../docs/COMPOSITION.md).
 
@@ -12,7 +12,7 @@ unchanged. Production work still follows the
 The owner requested a spike of this fiber path: a programmatic API has a
 domain-specific adapter to a hydrated Wire, whose messages may recursively
 contain live Wires. Shared machinery turns those messages into addressed ground
-Ontos data. The Bitnode network routes that data, and the destination reverses
+ontos data. The bitnode network routes that data, and the destination reverses
 the transformations. Domain adapters must not allocate references, maintain
 export tables, declare reference positions or implement hydration themselves.
 
@@ -21,7 +21,7 @@ Echo API                                             Echo provider
    | domain adapter                                     | domain adapter
 live Wire + recursive live values                    live Wire + live values
    | shared hydration                                   | shared hydration
-addressed ground Ontos ---- opaque middle router ---- addressed ground Ontos
+addressed ground ontos ---- opaque middle router ---- addressed ground ontos
    | addressless Endpoint                               | addressless Endpoint
    +-------------- local pair or WebSocket --------------+
 ```
@@ -92,8 +92,8 @@ byte-for-byte encoding equality are not implied by behavioral equivalence.
 
 ## Experimental choices, not new upstream laws
 
-`LiveValue` is an extension **above** Ontos: Atom, Tuple, a recursive LiveTuple,
-or a LiveWire. A Wire is never an Ontos ground Value. `LiveWire` is a deliberately
+`LiveValue` is an extension **above** ontos: Atom, Tuple, a recursive LiveTuple,
+or a LiveWire. A Wire is never an ontos ground Value. `LiveWire` is a deliberately
 small nominal class for this experiment, not a decision about public types or
 an additional production Wire interface. A future contract could express the
 relationship using parameterized types; that deserves an upstream decision.
@@ -109,7 +109,7 @@ liveData      = (0x00, atom)
               | (0x02, ((ownerPath ...), ownerScope, exportID))
 ```
 
-All fields are ground Ontos values; byte tags are one-byte atoms. The outer
+All fields are ground ontos values; byte tags are one-byte atoms. The outer
 destination is passed separately to AddressedWire.send. The addressed facade
 then supplies its already-released data framing. These experimental bytes are
 not proposed canonical conformance vectors.
@@ -119,7 +119,7 @@ reference positions, can also separate data from capabilities. It avoids a tag
 around each ordinary data node but needs rules for duplicate/overlapping
 positions and placeholders. This spike chooses the fully tagged form to make
 the separation easy to inspect, not to settle that encoding tradeoff. Neither
-form requires a new kind in Ontos or scanning ordinary payload tuples for
+form requires a new kind in ontos or scanning ordinary payload tuples for
 reference-shaped values.
 
 A reference names an owner at an absolute path in one admitted tree, its
@@ -166,7 +166,7 @@ still belong to domain conventions above the communication layer.
 
 | Owner | Finding and proposed follow-up |
 | --- | --- |
-| bitwire | Specify the recursive live-value/Wire boundary and its relation to ground Wire/AddressedWire, including unambiguous data encoding and reference lifetime. A manual export table alone does not fulfill the owner's fiber layering. Keep raw/addressed separation, exact byte paths and Ontos ground meanings intact. |
+| bitwire | Specify the recursive live-value/Wire boundary and its relation to ground Wire/AddressedWire, including unambiguous data encoding and reference lifetime. A manual export table alone does not fulfill the owner's fiber layering. Keep raw/addressed separation, exact byte paths and ontos ground meanings intact. |
 | bitruntime | Realize generic hydration together with registries, imported send-only proxies, bounds and cleanup. Carriers remain raw Endpoints; reuse the addressed facade. Production Go and TypeScript, independent upstream cases and interoperability remain necessary. |
 | bitnode | Compose those runtime facilities with the selected tree namespace, attachments and admission. Opaque transit routing does not require domain decoding or re-export at every hop. Its concrete routing/binding realization still needs qualification. |
 | Domain consumers | Adapt typed APIs to live messages and choose operation/reply semantics. A nested reply Wire replaces manually assigned reply-path/correlation machinery for this fixture. No registry or serialized-reference API is required in that adapter. |
