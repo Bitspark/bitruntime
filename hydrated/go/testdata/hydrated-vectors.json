@@ -1,0 +1,53 @@
+{
+  "basis": "bitwire decision 0019 (proposed), hydrated frame edition bitwire/hydrated/1. Encodings are hand-derived from ontos-codec-v1 (Atom = 00 uvarint(length) bytes; Tuple = 01 uvarint(arity) items), then checked against the released bitwire 0.5.0 encoder. Atoms are hex. Tags: 01 tuple, 02 wire; 00 and every other value are reserved. A reference is (02, ((path segments...), scope, id)) with a 16-octet scope and a 1-to-16-octet id. \"live\" describes the hydrated value with wire{path, scope, id} for a wire leaf; S and S2 are the two fixed scopes below.",
+  "scopes": {"S":"000102030405060708090a0b0c0d0e0f","S2":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"},
+  "encode": [
+    {"name":"bare atom","live":"hello","body":{"atom":"68656c6c6f"},"hex":"000568656c6c6f"},
+    {"name":"empty atom","live":"\"\"","body":{"atom":""},"hex":"0000"},
+    {"name":"an atom equal to the tuple tag stays an atom","live":"0x01","body":{"atom":"01"},"hex":"000101"},
+    {"name":"an atom equal to the wire tag stays an atom","live":"0x02","body":{"atom":"02"},"hex":"000102"},
+    {"name":"empty tuple","live":"()","body":{"tuple":[{"atom":"01"},{"tuple":[]}]},"hex":"01020001010100"},
+    {"name":"tuple of two atoms","live":"(a, b)","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"61"},{"atom":"62"}]}]},"hex":"01020001010102000161000162"},
+    {"name":"wire leaf","live":"wire{[client42], S, \"1\"}","body":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]},"hex":"0102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"wire at the root path","live":"wire{[], S, \"1\"}","body":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]},"hex":"0102000102010301000010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"wire with exact binary path segments","live":"wire{[\"\", ff2f], S2, \"7\"}","body":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":""},{"atom":"ff2f"}]},{"atom":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"},{"atom":"37"}]}]},"hex":"01020001020103010200000002ff2f0010f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000137"},
+    {"name":"echo request with a reply wire","live":"(echo, hello, wire{[client42], S, \"1\"})","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"6563686f"},{"atom":"68656c6c6f"},{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}]}]},"hex":"0102000101010300046563686f000568656c6c6f0102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"nested wires in a nested tuple","live":"(hello, (wire{[a,b,service2], S2, \"7\"}, wire{[client42], S, \"2\"}))","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"68656c6c6f"},{"tuple":[{"atom":"01"},{"tuple":[{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"61"},{"atom":"62"},{"atom":"7365727669636532"}]},{"atom":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"},{"atom":"37"}]}]},{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"32"}]}]}]}]}]}]},"hex":"01020001010102000568656c6c6f01020001010102010200010201030103000161000162000873657276696365320010f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001370102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000132"},
+    {"name":"one wire twice encodes identical references","live":"(wire{[client42], S, \"1\"}, wire{[client42], S, \"1\"})","body":{"tuple":[{"atom":"01"},{"tuple":[{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]},{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}]}]},"hex":"010200010101020102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f0001310102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"data shaped like an encoded wire stays data","live":"(0x02, ((client42), S, \"1\"))","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"02"},{"tuple":[{"atom":"01"},{"tuple":[{"tuple":[{"atom":"01"},{"tuple":[{"atom":"636c69656e743432"}]}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}]}]},"hex":"0102000101010200010201020001010103010200010101010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"data shaped like an encoded tuple stays data","live":"(0x01, ())","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"01"},{"tuple":[{"atom":"01"},{"tuple":[]}]}]}]},"hex":"0102000101010200010101020001010100"}
+  ],
+  "frames": [
+    {"name":"echo request to the provider","path":["61","62","7365727669636532"],"scope":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff","id":"37","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"6563686f"},{"atom":"68656c6c6f"},{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"636c69656e743432"}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}]}]},"hex":"01030013626974776972652f6164647265737365642f3101030001610001620008736572766963653201040012626974776972652f68796472617465642f310010f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001370102000101010300046563686f000568656c6c6f0102000102010301010008636c69656e7434320010000102030405060708090a0b0c0d0e0f000131"},
+    {"name":"reply to the caller carrying a further wire","path":["636c69656e743432"],"scope":"000102030405060708090a0b0c0d0e0f","id":"31","body":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"68656c6c6f"},{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"61"},{"atom":"62"},{"atom":"7365727669636532"}]},{"atom":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff"},{"atom":"38"}]}]}]}]},"hex":"01030013626974776972652f6164647265737365642f3101010008636c69656e74343201040012626974776972652f68796472617465642f310010000102030405060708090a0b0c0d0e0f00013101020001010102000568656c6c6f010200010201030103000161000162000873657276696365320010f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000138"},
+    {"name":"ground data only","path":["","ff2f"],"scope":"f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff","id":"37","body":{"atom":"70696e67"},"hex":"01030013626974776972652f6164647265737365642f31010200000002ff2f01040012626974776972652f68796472617465642f310010f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000137000470696e67"}
+  ],
+  "rejectBody": [
+    {"name":"a tag with no payload","value":{"tuple":[{"atom":"01"}]}},
+    {"name":"a tag with two payloads","value":{"tuple":[{"atom":"01"},{"tuple":[]},{"tuple":[]}]}},
+    {"name":"a tag that is not an atom","value":{"tuple":[{"tuple":[]},{"tuple":[]}]}},
+    {"name":"tag 0x00 is reserved","value":{"tuple":[{"atom":"00"},{"tuple":[]}]}},
+    {"name":"unknown tag 0x03","value":{"tuple":[{"atom":"03"},{"tuple":[]}]}},
+    {"name":"a two-octet tag","value":{"tuple":[{"atom":"0101"},{"tuple":[]}]}},
+    {"name":"tuple payload that is an atom","value":{"tuple":[{"atom":"01"},{"atom":"78"}]}},
+    {"name":"wire payload that is an atom","value":{"tuple":[{"atom":"02"},{"atom":"78"}]}},
+    {"name":"reference without an id","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"atom":"70"}]},{"atom":"000102030405060708090a0b0c0d0e0f"}]}]}},
+    {"name":"reference path that is an atom","value":{"tuple":[{"atom":"02"},{"tuple":[{"atom":"70"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}},
+    {"name":"reference path segment that is a tuple","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[{"tuple":[]}]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}]}},
+    {"name":"15-octet scope","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"atom":"000102030405060708090a0b0c0d0e"},{"atom":"31"}]}]}},
+    {"name":"17-octet scope","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"atom":"000102030405060708090a0b0c0d0e0f10"},{"atom":"31"}]}]}},
+    {"name":"scope that is a tuple","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"tuple":[]},{"atom":"31"}]}]}},
+    {"name":"empty id","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":""}]}]}},
+    {"name":"17-octet id","value":{"tuple":[{"atom":"02"},{"tuple":[{"tuple":[]},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"3131313131313131313131313131313131"}]}]}},
+    {"name":"a malformed node deep inside a valid tuple","value":{"tuple":[{"atom":"01"},{"tuple":[{"atom":"6f6b"},{"tuple":[{"atom":"01"},{"tuple":[{"tuple":[{"atom":"01"}]}]}]}]}]}}
+  ],
+  "rejectFrame": [
+    {"name":"another version","value":{"tuple":[{"atom":"626974776972652f68796472617465642f32"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"},{"atom":"78"}]}},
+    {"name":"three items","value":{"tuple":[{"atom":"626974776972652f68796472617465642f31"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"}]}},
+    {"name":"five items","value":{"tuple":[{"atom":"626974776972652f68796472617465642f31"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"},{"atom":"78"},{"atom":"79"}]}},
+    {"name":"15-octet target scope","value":{"tuple":[{"atom":"626974776972652f68796472617465642f31"},{"atom":"000102030405060708090a0b0c0d0e"},{"atom":"31"},{"atom":"78"}]}},
+    {"name":"empty target id","value":{"tuple":[{"atom":"626974776972652f68796472617465642f31"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":""},{"atom":"78"}]}},
+    {"name":"a bare atom","value":{"atom":"626974776972652f68796472617465642f31"}},
+    {"name":"a malformed body","value":{"tuple":[{"atom":"626974776972652f68796472617465642f31"},{"atom":"000102030405060708090a0b0c0d0e0f"},{"atom":"31"},{"tuple":[{"atom":"01"}]}]}}
+  ]
+}
