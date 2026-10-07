@@ -213,8 +213,13 @@ test('observation 17: Endpoint laws on every path', async () => {
   failing.receive(() => { throw new Error('receiver fault'); });
   const ref = s.expose(failing);
   s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('x')]), undefined);
-  await eventually(() => failing.failure !== undefined && s.live === 0, 'the failing receiver did not terminate its endpoint');
+  await eventually(() => failing.termination?.kind === 'failed' && s.live === 0, 'the failing receiver did not terminate its endpoint');
   assert.throws(() => s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('y')]), undefined), (e) => e.reason === UNKNOWN_EXPORT);
+  assert.equal((await failing.closed).kind, 'failed');
+  const quiet = new Endpoint(1);
+  assert.equal(quiet.termination, undefined);
+  await quiet.close();
+  assert.deepEqual(await quiet.closed, { kind: 'closed' });
 });
 
 test('observation 15, symmetry: sender and receiver count a value alike', async () => {

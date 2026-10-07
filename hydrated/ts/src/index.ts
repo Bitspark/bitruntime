@@ -2,16 +2,16 @@
 // hydrated wire protocol, bitwire/hydrated/1, realized in TypeScript. It mirrors
 // hydrated/go and is not a released API.
 import { Atom, Tuple, atom, tuple, encodeMessage, pathEqual } from '@bitspark/bitwire';
-import type { Path, AddressedWire } from '@bitspark/bitwire';
+import type { Path, AddressedWire, Termination } from '@bitspark/bitwire';
 
-/** A hydrated value: a ground ontos value, a HydratedTuple or a Wire. */
-export type Value = Atom | Tuple | HydratedTuple | Wire;
+/** A hydrated value: a ground ontos value, a HydratedTuple or a HydratedWire. */
+export type HydratedValue = Atom | Tuple | HydratedTuple | HydratedWire;
 
 /** Sends one hydrated value. Only an Endpoint's face or a proxy can travel (D7). */
-export interface Wire { send(value: Value): Promise<void> }
+export interface HydratedWire { readonly kind: 'wire'; send(value: HydratedValue): Promise<void> }
 
 /** What the composition establishes about an arrival; never part of a value (D4). */
-export type Context = unknown;
+export type ReceivedContext = unknown;
 
 /** The context of a send that never left the process. */
 export const LOCAL: unique symbol = Symbol('local');
@@ -38,28 +38,35 @@ const HEADER = atom(new TextEncoder().encode('bitwire/hydrated/1'));
 const TUPLE_TAG = atom([1]);
 const WIRE_TAG = atom([2]);
 
-/** A tuple with at least one Wire beneath it; see hydratedTuple (D1). */
+/** A tuple with at least one HydratedWire beneath it; see hydratedTuple (D1). */
 /** Only this module constructs hydrated tuples, so every one is canonical (D1, D7). */
 const CONSTRUCT = Symbol('hydrated tuple');
 
-/** A tuple with at least one Wire beneath it. Construct it with hydratedTuple(). */
+/**
+ * A tuple with at least one HydratedWire beneath it, shaped like bitwire's HydratedTuple
+ * (a ground Tuple has the same shape). Construct it with hydratedTuple().
+ */
 export class HydratedTuple {
-  readonly items: readonly Value[];
-  constructor(items: readonly Value[], token?: symbol) {
+  readonly kind = 'tuple' as const;
+  readonly #items: readonly HydratedValue[];
+  constructor(items: readonly HydratedValue[], token?: symbol) {
     if (token !== CONSTRUCT) throw new TypeError('hydrated: construct tuples with hydratedTuple()');
-    this.items = Object.freeze([...items]);
+    this.#items = Object.freeze([...items]);
     Object.freeze(this);
   }
+  get length(): number { return this.#items.length; }
+  items(): readonly HydratedValue[] { return this.#items; }
+  at(index: number): HydratedValue | undefined { return this.#items.at(index); }
 }
 
-// Any Wire may sit in a tuple; encoding refuses one the runtime does not own (D7).
-const isWire = (v: unknown): v is Wire => typeof (v as Wire | undefined)?.send === 'function';
+// Any HydratedWire may sit in a tuple; encoding refuses one the runtime does not own (D7).
+const isWire = (v: unknown): v is HydratedWire => typeof (v as HydratedWire | undefined)?.send === 'function';
 
 /** An Endpoint travels only as its sending face, on every path (D7). */
-const sendOnly = (v: Value): Value => (v instanceof Endpoint ? v.wire : v);
+const sendOnly = (v: HydratedValue): HydratedValue => (v instanceof Endpoint ? v.wire : v);
 
-/** Captures items; returns the ground tuple when no Wire is beneath them. */
-export function hydratedTuple(items: readonly Value[]): Value {
+/** Captures items; returns the ground tuple when no HydratedWire is beneath them. */
+export function hydratedTuple(items: readonly HydratedValue[]): HydratedValue {
   const captured = items.map(sendOnly);
   let live = false;
   for (const item of captured) {
@@ -70,8 +77,8 @@ export function hydratedTuple(items: readonly Value[]): Value {
 }
 
 /** Any tuple's items, ground or hydrated. */
-export function items(v: Value): readonly Value[] | undefined {
-  if (v instanceof HydratedTuple) return v.items;
+export function items(v: HydratedValue): readonly HydratedValue[] | undefined {
+  if (v instanceof HydratedTuple) return v.items();
   if (v instanceof Tuple) return v.items();
   return undefined;
 }
@@ -82,7 +89,7 @@ export class Namespace {
   constructor(name: string) { this.name = name; }
 }
 
-/** The ground form of a live Wire (D2, D3). */
+/** The ground form of a live HydratedWire (D2, D3). */
 export interface Reference { readonly path: Path; readonly scope: Atom; readonly id: Atom }
 
 const hex = (a: Atom) => Array.from(a.bytes(), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -94,17 +101,20 @@ const refValue = (r: Reference): Tuple => tuple([WIRE_TAG, tuple([tuple(r.path),
  * admitting send, a bounded queue and an owner lifetime. Its face is what a value
  * carries; closing it ends its export in every scope (D7).
  */
-export class Endpoint implements Wire {
-  readonly wire: Wire;
-  readonly closed: Promise<void>;
-  #queue: { value: Value; context: Context }[] = [];
+export class Endpoint implements HydratedWire {
+  readonly kind = 'wire' as const;
+  readonly wire: HydratedWire;
+  /** Resolves with how the endpoint ended, as bitwire's Endpoint contract does. */
+  readonly closed: Promise<Termination>;
+  #queue: { value: HydratedValue; context: ReceivedContext }[] = [];
   #limit: number;
-  #handler: ((value: Value, context: Context) => void) | undefined;
+  #handler: ((value: HydratedValue, context: ReceivedContext) => void) | undefined;
   #generation = 0;
   #failure: unknown;
   #isClosed = false;
   #draining = false;
-  #resolveClosed!: () => void;
+  #resolveClosed!: (termination: Termination) => void;
+  #termination: Termination | undefined;
   readonly #exports = new Map<Scope, Atom>();
 
   constructor(limit = 1) {
@@ -113,10 +123,10 @@ export class Endpoint implements Wire {
     this.closed = new Promise((resolve) => { this.#resolveClosed = resolve; });
   }
 
-  send(value: Value): Promise<void> { return this.wire.send(value); }
+  send(value: HydratedValue): Promise<void> { return this.wire.send(value); }
 
   /** Attaches the one receiver; its detach removes only that receiver. */
-  receive(handler: (value: Value, context: Context) => void): () => void {
+  receive(handler: (value: HydratedValue, context: ReceivedContext) => void): () => void {
     if (this.#handler) throw new Error('hydrated: receiver already attached');
     const generation = ++this.#generation;
     this.#handler = handler;
@@ -124,8 +134,8 @@ export class Endpoint implements Wire {
     return () => { if (this.#generation === generation) this.#handler = undefined; };
   }
 
-  /** The receiver failure that terminated the endpoint, if any. */
-  get failure(): unknown { return this.#failure; }
+  /** How the endpoint ended: failed with its receiver's failure, or closed; undefined while open. */
+  get termination(): Termination | undefined { return this.#termination; }
 
   async close(): Promise<void> {
     if (this.#isClosed) return;
@@ -134,13 +144,16 @@ export class Endpoint implements Wire {
     const exports = [...this.#exports];
     this.#exports.clear();
     for (const [scope, id] of exports) scope._withdraw(this, id);
-    this.#resolveClosed();
+    this.#termination = this.#failure === undefined
+      ? Object.freeze({ kind: 'closed' })
+      : Object.freeze({ kind: 'failed', message: String((this.#failure as Error)?.message ?? this.#failure) });
+    this.#resolveClosed(this.#termination);
   }
 
   get isClosed(): boolean { return this.#isClosed; }
 
   /** @internal */
-  _admit(value: Value, context: Context): void {
+  _admit(value: HydratedValue, context: ReceivedContext): void {
     if (this.#isClosed || this.#queue.length >= this.#limit) throw new Refusal(TARGET_REFUSED);
     this.#queue.push({ value, context });
     this.#drain();
@@ -179,17 +192,19 @@ export class Endpoint implements Wire {
 const owners = new WeakMap<Face, Endpoint>();
 
 /** An Endpoint's sending face. It grants sending only. */
-class Face implements Wire {
+class Face implements HydratedWire {
+  readonly kind = 'wire' as const;
   constructor(endpoint: Endpoint) { owners.set(this, endpoint); Object.freeze(this); }
-  async send(value: Value): Promise<void> { owners.get(this)!._admit(sendOnly(value), LOCAL); }
+  async send(value: HydratedValue): Promise<void> { owners.get(this)!._admit(sendOnly(value), LOCAL); }
 }
 
 /**
- * An imported Wire. It carries its reference and namespace, so any participant
+ * An imported HydratedWire. It carries its reference and namespace, so any participant
  * in the namespace forwards it unchanged (D6). A dead reason marks this
  * participant's own stale or withdrawn reference (D7, returning home).
  */
-class Proxy implements Wire {
+class Proxy implements HydratedWire {
+  readonly kind = 'wire' as const;
   readonly ref: Reference;
   readonly ns: Namespace;
   readonly #via: Scope;
@@ -198,7 +213,7 @@ class Proxy implements Wire {
     this.ref = ref; this.ns = ns; this.#via = via; this.#dead = dead;
     Object.freeze(this);
   }
-  async send(value: Value): Promise<void> {
+  async send(value: HydratedValue): Promise<void> {
     if (this.#dead) throw new Refusal(this.#dead);
     return this.#via._send(this.ref, value);
   }
@@ -212,8 +227,8 @@ interface Budget { nodes: number; bytes: number }
 
 /**
  * The node, depth and byte bounds count the hydrated value, identically when
- * sending and receiving (D8): each atom, tuple and Wire leaf is one node at its
- * tuple depth; bytes are atom bytes plus each Wire leaf's reference material.
+ * sending and receiving (D8): each atom, tuple and HydratedWire leaf is one node at its
+ * tuple depth; bytes are atom bytes plus each HydratedWire leaf's reference material.
  */
 const refBytes = (path: Path): number => path.reduce((n, a) => n + a.length, 32);
 
@@ -248,7 +263,7 @@ export class Scope {
   }
 
   /** Composition bootstrap: a proxy for a reference. */
-  connect(ref: Reference): Wire { return this.#import(ref, new Map()); }
+  connect(ref: Reference): HydratedWire { return this.#import(ref, new Map()); }
 
   /** Ends the scope: its exports end and its references go stale. Closes no endpoint. */
   close(): void {
@@ -300,7 +315,7 @@ export class Scope {
 
   /** Encodes atomically, registers new exports, then admits one frame (D5). */
   /** @internal */
-  async _send(dest: Reference, value: Value): Promise<void> {
+  async _send(dest: Reference, value: HydratedValue): Promise<void> {
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
     const staged = new Map<Endpoint, Atom>();
     const body = this._encode(value, 0, staged, { nodes: 0, bytes: 0 });
@@ -311,7 +326,7 @@ export class Scope {
   }
 
   /** @internal */
-  _encode(v: Value, depth: number, staged: Map<Endpoint, Atom>, b: Budget): Atom | Tuple {
+  _encode(v: HydratedValue, depth: number, staged: Map<Endpoint, Atom>, b: Budget): Atom | Tuple {
     if (v instanceof Atom) { this.#spend(b, depth, v.length); return v; }
     if (v instanceof Tuple || v instanceof HydratedTuple) {
       this.#spend(b, depth, 0);
@@ -327,12 +342,12 @@ export class Scope {
       this.#spend(b, depth, refBytes(v.ref.path));
       return refValue(v.ref);
     }
-    if (v && typeof (v as Wire).send === 'function') throw new Refusal(UNEXPORTABLE);
+    if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
     throw new TypeError('hydrated: not a value');
   }
 
   /** Decides one value addressed to this participant's own path (D4); throws a Refusal as a host diagnostic. */
-  deliver(path: Path, message: Atom | Tuple, context: Context): void {
+  deliver(path: Path, message: Atom | Tuple, context: ReceivedContext): void {
     if (!pathEqual(path, this.path)) throw new Refusal(MALFORMED_FRAME);
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
     // The whole frame counts against the byte bound, reference material included (D8).
@@ -349,7 +364,7 @@ export class Scope {
 
   /** Occurrences of one reference within the value share one proxy; nothing is retained (D7). */
   /** @internal */
-  _decode(v: Atom | Tuple, depth: number, interned: Map<string, Wire>, b: Budget): Value {
+  _decode(v: Atom | Tuple, depth: number, interned: Map<string, HydratedWire>, b: Budget): HydratedValue {
     if (v instanceof Atom) { this.#spend(b, depth, v.length); return v; }
     if (v.length !== 2) throw new Refusal(MALFORMED_FRAME);
     const [tag, payload] = v.items();
@@ -367,8 +382,8 @@ export class Scope {
     throw new Refusal(MALFORMED_FRAME);
   }
 
-  /** A reference home in the current scope returns the original face; stale or withdrawn, a Wire that refuses (D7). */
-  #import(ref: Reference, interned: Map<string, Wire>): Wire {
+  /** A reference home in the current scope returns the original face; stale or withdrawn, a HydratedWire that refuses (D7). */
+  #import(ref: Reference, interned: Map<string, HydratedWire>): HydratedWire {
     if (pathEqual(ref.path, this.path)) {
       if (!ref.scope.equals(this.token)) return new Proxy(ref, this.ns, this, STALE_SCOPE);
       const endpoint = this.#byId.get(hex(ref.id));

@@ -32,7 +32,7 @@ const packOutput = JSON.parse(run(npm, ['pack', '--json', '--pack-destination', 
 // npm 12 keys results by package name; Node's bundled npm returns a list.
 const packed = Array.isArray(packOutput) ? packOutput : Object.values(packOutput);
 const files = packed[0].files.map((file) => file.path);
-for (const required of ['LICENSE', 'NOTICE', 'README.md', 'package.json', 'dist/core/ts/src/index.js', 'dist/websocket/ts/src/index.d.ts'])
+for (const required of ['LICENSE', 'NOTICE', 'README.md', 'package.json', 'dist/core/ts/src/index.js', 'dist/websocket/ts/src/index.d.ts', 'dist/hydrated/ts/src/index.js', 'dist/hydrated/ts/src/index.d.ts'])
   assert.ok(files.includes(required), `the tarball lacks ${required}`);
 assert.ok(!files.some((file) => /\/test\//.test(file) || file.endsWith('.go')), 'the tarball carries tests or Go sources');
 writeFileSync(join(temp, 'package.json'), '{"type":"module","private":true}\n');
@@ -42,6 +42,7 @@ import assert from 'node:assert/strict';
 import {atom,tuple,pathEqual} from '@bitspark/bitwire';
 import {pair,compose,addressed,bind,asAddressed} from '@bitspark/bitruntime/core';
 import {connectWebSocket,listenWebSocket} from '@bitspark/bitruntime/websocket';
+import {Endpoint,Namespace,Scope,hydratedTuple,items} from '@bitspark/bitruntime/hydrated';
 const message=tuple([atom([255,0])]);
 const [left,right]=pair();const local=new Promise(r=>right.receive(r));await left.send(message);assert.ok((await local).equals(message));await left.close();
 const leaf=compose(7);assert.equal(compose(3,[[atom([]),leaf]]).at([atom([])]),leaf);
@@ -53,8 +54,17 @@ const client=await connectWebSocket(server.url);const scoped=addressed(client);
 const remote=new Promise(r=>scoped.receive((path,value)=>r({path,value})));
 await bind(scoped,[atom([]),atom([255])]).send(message);const result=await remote;
 assert.ok(pathEqual(result.path,[atom([]),atom([255])]));assert.ok(result.value.equals(message));await client.close();await server.close();
+{
+ const [x,y]=pair(),ns=new Namespace('smoke'),ax=addressed(x),ay=addressed(y);
+ const sx=new Scope(ns,[atom([1])],ax),sy=new Scope(ns,[atom([2])],ay);
+ ax.receive((p,v)=>sx.deliver(p,v,'x'));ay.receive((p,v)=>sy.deliver(p,v,'y'));
+ const service=new Endpoint(4);service.receive(v=>{const [arg,reply]=items(v);void reply.send(arg);});
+ const reply=new Endpoint(1);const back=new Promise(r=>reply.receive(r));
+ await sx.connect(sy.expose(service)).send(hydratedTuple([message,reply]));
+ assert.ok((await back).equals(message));await reply.close();await service.close();await x.close();
+}
 for(const retired of ['engine','dispatch','transports'])await assert.rejects(import('@bitspark/bitruntime/'+retired),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
-console.log('Fresh installed package: local pair, tree and WebSocket passed.');
+console.log('Fresh installed package: local pair, tree, WebSocket and hydrated reply passed.');
 `);
 run(process.execPath, ['smoke.mjs'], temp);
 const metadata = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

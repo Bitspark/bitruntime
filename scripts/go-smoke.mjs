@@ -1,5 +1,5 @@
-import {spawnSync} from 'node:child_process';
-import {mkdtempSync, writeFileSync, readFileSync} from 'node:fs';
+import {spawn, spawnSync} from 'node:child_process';
+import {mkdirSync, mkdtempSync, writeFileSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -19,4 +19,19 @@ writeFileSync(join(temp, 'main.go'), readFileSync(new URL('../conformance/intero
 run(['get', `github.com/Bitspark/bitruntime@${revision}`]);
 run(['mod', 'tidy']);
 run(['run', '.', 'smoke']);
-console.log(`Installed public Go module at ${revision} in ${temp}`);
+
+// The hydrated peer from the public module: serve, then call with a reply Wire.
+const hydrated = join(temp, 'hydrated');
+mkdirSync(hydrated);
+writeFileSync(join(hydrated, 'main.go'), readFileSync(new URL('../conformance/interop/hydrated/main.go', import.meta.url)));
+const binary = join(temp, process.platform === 'win32' ? 'hydrated.exe' : 'hydrated');
+run(['build', '-o', binary, './hydrated']);
+const server = spawn(binary, ['serve'], {stdio: ['pipe', 'pipe', 'inherit']});
+const url = await new Promise((resolve, reject) => {
+  server.stdout.once('data', (d) => resolve(String(d).trim().split(/\s+/)[0]));
+  server.once('error', reject);
+});
+const client = spawnSync(binary, ['client', url], {encoding: 'utf8', timeout: 30000});
+server.stdin.end();
+if (client.status !== 0 || client.stdout.trim() !== 'ok') throw new Error('hydrated Go peer failed: ' + client.stderr);
+console.log(`Installed public Go module at ${revision} in ${temp}, including the hydrated peer`);

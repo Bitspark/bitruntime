@@ -1,20 +1,35 @@
-# Hydrated wires (evidence for bitwire decision 0019)
+# Hydrated wires
 
-**Status, 7 October 2026:** evidence for the proposed
-[bitwire decision 0019](https://github.com/Bitspark/bitwire/pull/83), the first
-edition of the hydrated wire protocol. This is not a released API, and this
-branch is not proposed for merge until the record is accepted. The
-[package](go/hydrated.go) realizes the record's rules in Go. [Its tests](go/hydrated_test.go)
-run the record's observations 1-15 and 17 around an opaque middle router, over local
-pairs and WebSocket where the carrier matters.
+**Status, 7 October 2026:** the realization of bitwire decision 0019, the hydrated
+wire protocol's first edition, accepted at bitwire `5b1de82`. It is proposed for
+the next bitruntime release. Before release it must import bitwire's public
+hydrated declarations and its shared pure codec instead of the private types
+and grammar traversal here, and keep every observation below green.
 
-The [TypeScript mirror](ts/src/index.ts) repeats observations 1-4, 6-10, 15 and 17
-([tests](ts/test/hydrated.test.mjs)), with 2, 3, 4 and 7 over both carriers.
-[scripts/hydrated-interop.mjs](../scripts/hydrated-interop.mjs) runs observation
-14 over a real WebSocket in both roles, Go serving TypeScript and TypeScript
-serving Go. Both peers build from this repository, not from fresh published
-dependencies, so they show the grammar interoperates, not package delivery.
+[The Go package](go/hydrated.go) and [the TypeScript module](ts/src/index.ts)
+hold the stateful half of the protocol:
+- scopes with random tokens and 16-octet unpredictable export ids;
+- frames sent to owner paths;
+- proxies recognized throughout the namespace;
+- exports bound to a local Endpoint's lifetime;
+- liveness judged on send;
+- received context delivered beside the value;
+- one counting domain for bounds, in both directions;
+- Endpoint termination, reported as bitwire's `Termination`.
 
-The record's vectors are copied from bitwire#83 (accepted, at 6e33fb3) into
+[The Go tests](go/hydrated_test.go) run the record's observations 1-15 and 17
+around an opaque middle router, over local pairs and WebSocket where the carrier
+matters. The [TypeScript tests](ts/test/hydrated.test.mjs) repeat observations
+1-4, 6-10, 15 and 17. [scripts/hydrated-interop.mjs](../scripts/hydrated-interop.mjs)
+runs observation 16 over a real WebSocket in both roles: Go serving TypeScript,
+and TypeScript serving Go. The peers build from this repository; published
+packages are qualified at release.
+
+[The composition suite](ts/test/COMPOSITION.md) is Fiber Composition's
+consumer conformance, accepted at `4217f1b`. It covers Cell, Text and Counter
+adapters, nested cells, lazy reads, both write directions, failures and bounded
+reply lifetimes, over both carriers.
+
+The record's vectors are copied from bitwire `5b1de82` into
 [testdata](go/testdata/hydrated-vectors.json), pinned by sha256; both languages
 replay them.

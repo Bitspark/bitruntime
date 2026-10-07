@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Add `hydrated/{go,ts}`, the realization of bitwire decision 0019 (hydrated
+  wire protocol, first edition).
+  - Messages may carry live Wires; references are `(owner path, scope, id)`,
+    with 16-octet unpredictable ids, valid end to end in one namespace.
+  - Exports are bound to a local Endpoint's lifetime, and liveness is judged on
+    send.
+  - Received context is delivered beside the value.
+  - Bounds use one counting domain in both directions.
+- Go/TypeScript hydrated interoperability, and the composition conformance
+  suite (Cell, Text, Counter).
+
 ## 0.6.0
 
 - Restore addressless Wire sending and Endpoint ownership under bitwire 0.5.0.

@@ -4,12 +4,12 @@
 //	hydrated serve        listen at participant [s]; on connection, expose an echo
 //	                      endpoint and send its reference payload at ["bootstrap"];
 //	                      print the URL; exit when stdin closes
-//	hydrated client <url> participant [c]: call "continue" with a reply Wire, send a
-//	                      third Wire through the returned continuation, print "ok"
-//	                      when the third Wire receives the value
+//	hydrated client <url> participant [c]: call "continue" with a reply HydratedWire, send a
+//	                      third HydratedWire through the returned continuation, print "ok"
+//	                      when the third HydratedWire receives the value
 //
 // The echo: (op, arg, reply) replies (arg, continuation); the continuation sends
-// the value it receives to the Wire it carries, then closes.
+// the value it receives to the HydratedWire it carries, then closes.
 package main
 
 import (
@@ -60,16 +60,16 @@ func participant(link wire.AddressedEndpoint, path wire.Path, onBootstrap func(o
 	return scope
 }
 
-func echo(v hydrated.Value, _ hydrated.Context) {
+func echo(v hydrated.HydratedValue, _ hydrated.ReceivedContext) {
 	xs, _ := hydrated.Items(v)
 	cont := hydrated.NewEndpoint(1)
-	_, _ = cont.Receive(func(next hydrated.Value, _ hydrated.Context) {
+	_, _ = cont.Receive(func(next hydrated.HydratedValue, _ hydrated.ReceivedContext) {
 		ys, _ := hydrated.Items(next)
-		_ = ys[1].(hydrated.Wire).Send(ys[0])
+		_ = ys[1].(hydrated.HydratedWire).Send(ys[0])
 		_ = cont.Close()
 	})
 	r, _ := hydrated.NewTuple(xs[1], cont)
-	_ = xs[2].(hydrated.Wire).Send(r)
+	_ = xs[2].(hydrated.HydratedWire).Send(r)
 }
 
 func serve() {
@@ -114,13 +114,13 @@ func client(url string) {
 		fail(err)
 	}
 	reply := hydrated.NewEndpoint(1)
-	replies := make(chan hydrated.Value, 1)
-	_, _ = reply.Receive(func(v hydrated.Value, _ hydrated.Context) { replies <- v })
+	replies := make(chan hydrated.HydratedValue, 1)
+	_, _ = reply.Receive(func(v hydrated.HydratedValue, _ hydrated.ReceivedContext) { replies <- v })
 	req, _ := hydrated.NewTuple(text("continue"), text("hello"), reply)
 	if err := scope.Connect(ref).Send(req); err != nil {
 		fail(err)
 	}
-	var r hydrated.Value
+	var r hydrated.HydratedValue
 	select {
 	case r = <-replies:
 	case <-time.After(10 * time.Second):
@@ -131,19 +131,19 @@ func client(url string) {
 		fail(fmt.Errorf("wrong reply"))
 	}
 	third := hydrated.NewEndpoint(1)
-	thirds := make(chan hydrated.Value, 1)
-	_, _ = third.Receive(func(v hydrated.Value, _ hydrated.Context) { thirds <- v })
-	next, _ := hydrated.NewTuple(text("third Wire"), third)
-	if err := xs[1].(hydrated.Wire).Send(next); err != nil {
+	thirds := make(chan hydrated.HydratedValue, 1)
+	_, _ = third.Receive(func(v hydrated.HydratedValue, _ hydrated.ReceivedContext) { thirds <- v })
+	next, _ := hydrated.NewTuple(text("third HydratedWire"), third)
+	if err := xs[1].(hydrated.HydratedWire).Send(next); err != nil {
 		fail(err)
 	}
 	select {
 	case v := <-thirds:
-		if !v.(ontos.Atom).Equal(text("third Wire")) {
+		if !v.(ontos.Atom).Equal(text("third HydratedWire")) {
 			fail(fmt.Errorf("wrong third value"))
 		}
 	case <-time.After(10 * time.Second):
-		fail(fmt.Errorf("third Wire not reached"))
+		fail(fmt.Errorf("third HydratedWire not reached"))
 	}
 	fmt.Println("ok")
 	_ = e.Close()

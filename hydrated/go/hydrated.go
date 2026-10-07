@@ -19,16 +19,16 @@ import (
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
-// Value is a hydrated value: a ground ontos value, a Tuple or a Wire.
-type Value any
+// HydratedValue is a hydrated value: a ground ontos value, a Tuple or a HydratedWire.
+type HydratedValue any
 
-// Wire sends one hydrated value. Only a local Endpoint's sending face or a proxy
+// HydratedWire sends one hydrated value. Only a local Endpoint's sending face or a proxy
 // imported in the same namespace can travel inside a hydrated value (D7).
-type Wire interface{ Send(Value) error }
+type HydratedWire interface{ Send(HydratedValue) error }
 
-// Context is what the composition establishes about an arrival, for example a
+// ReceivedContext is what the composition establishes about an arrival, for example a
 // checked origin. It is never part of a value (D4).
-type Context any
+type ReceivedContext any
 
 // Local is the context of a send that never left the process.
 type Local struct{}
@@ -56,15 +56,15 @@ var (
 	wireTag  = ontos.NewAtom([]byte{2})
 )
 
-// Tuple is a hydrated tuple with at least one Wire beneath it. NewTuple returns
+// Tuple is a hydrated tuple with at least one HydratedWire beneath it. NewTuple returns
 // the ground tuple when there is none (D1).
-type Tuple struct{ items []Value }
+type Tuple struct{ items []HydratedValue }
 
-// NewTuple captures items. Each must be an ontos value, a Tuple or a Wire. An
+// NewTuple captures items. Each must be an ontos value, a Tuple or a HydratedWire. An
 // Endpoint is captured as its sending face: a value never carries receive or
 // close authority, on any path (D7).
-func NewTuple(items ...Value) (Value, error) {
-	captured := make([]Value, len(items))
+func NewTuple(items ...HydratedValue) (HydratedValue, error) {
+	captured := make([]HydratedValue, len(items))
 	for i, item := range items {
 		captured[i] = sendOnly(item)
 	}
@@ -76,7 +76,7 @@ func NewTuple(items ...Value) (Value, error) {
 			ground = append(ground, x)
 		case ontos.Tuple:
 			ground = append(ground, x)
-		case Tuple, Wire:
+		case Tuple, HydratedWire:
 			live = true
 		default:
 			return nil, errors.New("hydrated: not a value")
@@ -90,7 +90,7 @@ func NewTuple(items ...Value) (Value, error) {
 
 // sendOnly projects an Endpoint to its sending face, and the zero Tuple, the
 // only one NewTuple does not make, to the ground empty tuple (D1, D7).
-func sendOnly(v Value) Value {
+func sendOnly(v HydratedValue) HydratedValue {
 	switch x := v.(type) {
 	case *Endpoint:
 		return x.face
@@ -103,15 +103,15 @@ func sendOnly(v Value) Value {
 }
 
 // Items returns the tuple's items.
-func (t Tuple) Items() []Value { return append([]Value(nil), t.items...) }
+func (t Tuple) Items() []HydratedValue { return append([]HydratedValue(nil), t.items...) }
 
 // Items returns any tuple's items, ground or hydrated.
-func Items(v Value) ([]Value, bool) {
+func Items(v HydratedValue) ([]HydratedValue, bool) {
 	switch x := v.(type) {
 	case Tuple:
 		return x.Items(), true
 	case ontos.Tuple:
-		out := make([]Value, x.Len())
+		out := make([]HydratedValue, x.Len())
 		for i, item := range x.Items() {
 			out[i] = item
 		}
@@ -127,7 +127,7 @@ type Namespace struct{ name string }
 // NewNamespace creates a namespace.
 func NewNamespace(name string) *Namespace { return &Namespace{name} }
 
-// Reference is the ground form of a live Wire (D2, D3).
+// Reference is the ground form of a live HydratedWire (D2, D3).
 type Reference struct {
 	Path      wire.Path
 	Scope, ID ontos.Atom
@@ -165,7 +165,7 @@ type Endpoint struct {
 	mu      sync.Mutex
 	queue   []delivery
 	limit   int
-	handler func(Value, Context)
+	handler func(HydratedValue, ReceivedContext)
 	gen     uint64 // receiver generation: a detach removes only its own receiver
 	failure error  // set when a receiver failed and so terminated the endpoint
 	closed  bool
@@ -176,14 +176,14 @@ type Endpoint struct {
 }
 
 type delivery struct {
-	value   Value
-	context Context
+	value   HydratedValue
+	context ReceivedContext
 }
 
 // face is an Endpoint's sending face. It grants sending only.
 type face struct{ e *Endpoint }
 
-func (f *face) Send(v Value) error { return f.e.admit(sendOnly(v), Local{}) }
+func (f *face) Send(v HydratedValue) error { return f.e.admit(sendOnly(v), Local{}) }
 
 // NewEndpoint creates an endpoint whose queue admits at most limit values.
 func NewEndpoint(limit int) *Endpoint {
@@ -196,15 +196,15 @@ func NewEndpoint(limit int) *Endpoint {
 	return e
 }
 
-// Wire is the endpoint's sending face.
-func (e *Endpoint) Wire() Wire { return e.face }
+// HydratedWire is the endpoint's sending face.
+func (e *Endpoint) Wire() HydratedWire { return e.face }
 
 // Send admits a value locally, as its sending face does.
-func (e *Endpoint) Send(v Value) error { return e.face.Send(v) }
+func (e *Endpoint) Send(v HydratedValue) error { return e.face.Send(v) }
 
 // Receive attaches the one receiver. Values are dispatched in admission order,
 // never inline with the admitting send.
-func (e *Endpoint) Receive(handler func(Value, Context)) (detach func(), err error) {
+func (e *Endpoint) Receive(handler func(HydratedValue, ReceivedContext)) (detach func(), err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.handler != nil {
@@ -223,11 +223,19 @@ func (e *Endpoint) Receive(handler func(Value, Context)) (detach func(), err err
 	}, nil
 }
 
-// Failure reports the receiver failure that terminated the endpoint, if any.
-func (e *Endpoint) Failure() error {
+// Termination reports how the endpoint ended, as bitwire's Endpoint contract
+// does: "failed" with the receiver's failure, or "closed". It is the zero value
+// while the endpoint is open, and stable once Closed is closed.
+func (e *Endpoint) Termination() wire.Termination {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.failure
+	switch {
+	case e.failure != nil:
+		return wire.Termination{Kind: "failed", Message: e.failure.Error()}
+	case e.closed:
+		return wire.Termination{Kind: "closed"}
+	}
+	return wire.Termination{}
 }
 
 // Closed is closed when the endpoint closes.
@@ -252,7 +260,7 @@ func (e *Endpoint) Close() error {
 	return nil
 }
 
-func (e *Endpoint) admit(v Value, ctx Context) error {
+func (e *Endpoint) admit(v HydratedValue, ctx ReceivedContext) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.closed || len(e.queue) >= e.limit {
@@ -298,7 +306,7 @@ func (e *Endpoint) dispatch() {
 	}
 }
 
-func deliverTo(h func(Value, Context), d delivery) (err error) {
+func deliverTo(h func(HydratedValue, ReceivedContext), d delivery) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("hydrated: receiver failed: %v", r)
@@ -331,7 +339,7 @@ func (e *Endpoint) isClosed() bool {
 	return e.closed
 }
 
-// proxy is an imported Wire. It carries its reference and namespace, so any
+// proxy is an imported HydratedWire. It carries its reference and namespace, so any
 // participant in the namespace forwards it unchanged (D6). A proxy with a dead
 // reason is this participant's own stale or withdrawn reference: its sends are
 // refused locally (D7, returning home).
@@ -342,7 +350,7 @@ type proxy struct {
 	dead Refusal
 }
 
-func (p *proxy) Send(v Value) error {
+func (p *proxy) Send(v HydratedValue) error {
 	if p.dead != "" {
 		return p.dead
 	}
@@ -412,7 +420,7 @@ func (s *Scope) Expose(e *Endpoint) (Reference, error) {
 }
 
 // Connect returns a proxy for a reference, for composition bootstrap.
-func (s *Scope) Connect(r Reference) Wire { return s.importRef(r, map[string]Wire{}) }
+func (s *Scope) Connect(r Reference) HydratedWire { return s.importRef(r, map[string]HydratedWire{}) }
 
 // Close ends the scope: its exports end and its references go stale. It closes
 // no domain endpoint.
@@ -502,8 +510,8 @@ func (s *Scope) commit(staged map[*Endpoint]ontos.Atom) error {
 type budget struct{ nodes, bytes int }
 
 // The node, depth and byte bounds count the hydrated value, identically when
-// sending and receiving (D8): each atom, tuple and Wire leaf is one node at its
-// tuple depth; bytes are atom bytes plus each Wire leaf's reference material.
+// sending and receiving (D8): each atom, tuple and HydratedWire leaf is one node at its
+// tuple depth; bytes are atom bytes plus each HydratedWire leaf's reference material.
 func refBytes(path wire.Path) int {
 	n := 32 // scope token and export id
 	for _, a := range path {
@@ -523,7 +531,7 @@ func (s *Scope) spend(b *budget, depth, n int) error {
 
 // send encodes v atomically and registers its new exports in one step per
 // scope, then admits one frame to the owner path (D5).
-func (s *Scope) send(dest Reference, v Value) error {
+func (s *Scope) send(dest Reference, v HydratedValue) error {
 	s.mu.Lock()
 	closed := s.closed
 	s.mu.Unlock()
@@ -537,7 +545,7 @@ func (s *Scope) send(dest Reference, v Value) error {
 	return s.sender.Send(dest.Path, frame)
 }
 
-func (s *Scope) stage(dest Reference, v Value) (ontos.Value, error) {
+func (s *Scope) stage(dest Reference, v HydratedValue) (ontos.Value, error) {
 	s.encodeMu.Lock()
 	defer s.encodeMu.Unlock()
 	staged := map[*Endpoint]ontos.Atom{}
@@ -552,7 +560,7 @@ func (s *Scope) stage(dest Reference, v Value) (ontos.Value, error) {
 	return frame, s.commit(staged)
 }
 
-func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *budget) (ontos.Value, error) {
+func (s *Scope) encode(v HydratedValue, depth int, staged map[*Endpoint]ontos.Atom, b *budget) (ontos.Value, error) {
 	switch x := v.(type) {
 	case ontos.Atom:
 		return x, s.spend(b, depth, x.Len())
@@ -585,7 +593,7 @@ func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *b
 			return nil, ForeignNamespace
 		}
 		return x.ref.value(), s.spend(b, depth, refBytes(x.ref.Path))
-	case Wire:
+	case HydratedWire:
 		return nil, Unexportable
 	}
 	return nil, errors.New("hydrated: not a value")
@@ -593,7 +601,7 @@ func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *b
 
 // Deliver decides one value addressed to this participant's own path (D4). The
 // returned refusal is a host diagnostic; nothing is sent back.
-func (s *Scope) Deliver(path wire.Path, message ontos.Value, ctx Context) error {
+func (s *Scope) Deliver(path wire.Path, message ontos.Value, ctx ReceivedContext) error {
 	if !wire.PathEqual(path, s.path) {
 		return MalformedFrame
 	}
@@ -624,7 +632,7 @@ func (s *Scope) Deliver(path wire.Path, message ontos.Value, ctx Context) error 
 	if target == nil {
 		return UnknownExport
 	}
-	value, err := s.decode(f.At(3), 0, map[string]Wire{}, &budget{})
+	value, err := s.decode(f.At(3), 0, map[string]HydratedWire{}, &budget{})
 	if err != nil {
 		return err
 	}
@@ -633,7 +641,7 @@ func (s *Scope) Deliver(path wire.Path, message ontos.Value, ctx Context) error 
 
 // decode reads a body. Occurrences of one reference within the value share one
 // proxy; nothing is retained across messages (D7).
-func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *budget) (Value, error) {
+func (s *Scope) decode(v ontos.Value, depth int, interned map[string]HydratedWire, b *budget) (HydratedValue, error) {
 	if a, ok := v.(ontos.Atom); ok {
 		return a, s.spend(b, depth, a.Len())
 	}
@@ -654,7 +662,7 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 		if err := s.spend(b, depth, 0); err != nil {
 			return nil, err
 		}
-		items := make([]Value, children.Len())
+		items := make([]HydratedValue, children.Len())
 		for i, c := range children.Items() {
 			var err error
 			if items[i], err = s.decode(c, depth+1, interned, b); err != nil {
@@ -702,10 +710,10 @@ func readReference(v ontos.Value) (Reference, error) {
 	return Reference{path, scope, id}, nil
 }
 
-// importRef turns a reference into a Wire. A reference to this participant in
+// importRef turns a reference into a HydratedWire. A reference to this participant in
 // its current scope returns home to the original face; a stale or withdrawn one
-// becomes a Wire whose sends are refused. Liveness is judged on send (D7).
-func (s *Scope) importRef(r Reference, interned map[string]Wire) Wire {
+// becomes a HydratedWire whose sends are refused. Liveness is judged on send (D7).
+func (s *Scope) importRef(r Reference, interned map[string]HydratedWire) HydratedWire {
 	if wire.PathEqual(r.Path, s.path) {
 		if !r.Scope.Equal(s.token) {
 			return &proxy{ref: r, ns: s.ns, via: s, dead: StaleScope}
