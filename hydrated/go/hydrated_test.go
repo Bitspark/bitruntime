@@ -58,7 +58,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 	}
 }
 
-// --- vectors (bitwire#83 at 20a6b6b, pinned by hash) ---
+// --- vectors (bitwire#83 revision 2, pinned by hash) ---
 
 type jsonValue map[string]json.RawMessage
 
@@ -97,7 +97,7 @@ func TestObservation1VectorsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum := sha256.Sum256(raw); hex.EncodeToString(sum[:]) != "621325467a19fa5d5ad34a1805e38feadb5609ad13fe5e71e991cf87b4d77278" {
+	if sum := sha256.Sum256(raw); hex.EncodeToString(sum[:]) != "ce6b9f0f45db9c64627bbc1ba007344a8b4dde44297cc771431a7bc122546e6f" {
 		t.Fatal("vectors changed; repin to the reviewed bitwire record")
 	}
 	var v struct {
@@ -138,10 +138,11 @@ func TestObservation1VectorsRoundTrip(t *testing.T) {
 			t.Fatalf("%s: %v", c.Name, err)
 		}
 	}
-	// Frame rejection with a live target at the vectors' scope S and id "1".
+	// Frame rejection with a live target at the vectors' scope S and id I1.
 	s.token = ontos.NewAtom([]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15})
+	i1, _ := hex.DecodeString("101112131415161718191a1b1c1d1e1f")
 	target := NewEndpoint(8)
-	s.byID["1"], s.byEndpoint[target] = target, text("1")
+	s.byID[string(i1)], s.byEndpoint[target] = target, ontos.NewAtom(i1)
 	for _, c := range v.RejectFrame {
 		if err := s.Deliver(s.path, ground(c.Value), nil); !errors.Is(err, MalformedFrame) {
 			t.Fatalf("%s: %v", c.Name, err)
@@ -526,7 +527,7 @@ func TestObservation7StaleScopeCannotReachTheReplacement(t *testing.T) {
 	})
 }
 
-func TestObservation8ReturningHome(t *testing.T) {
+func TestObservation9ReturningHome(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	a, b := tr.parts["client"].scope(), tr.parts["provider"].scope()
 	var back Wire
@@ -569,7 +570,7 @@ func TestObservation8ReturningHome(t *testing.T) {
 	}
 }
 
-func TestObservation9ReceivedContextIsNotData(t *testing.T) {
+func TestObservation10ReceivedContextIsNotData(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	got := make(chan received, 1)
 	_, svc := serve(t, tr.parts["provider"].scope(), func(v Value, c Context) { got <- received{v, c} })
@@ -583,7 +584,7 @@ func TestObservation9ReceivedContextIsNotData(t *testing.T) {
 	}
 }
 
-func TestObservation10AtomicDecoding(t *testing.T) {
+func TestObservation11AtomicDecoding(t *testing.T) {
 	tr := newTree(t, "pair", "client", "provider")
 	b := tr.parts["provider"].scope()
 	var mu sync.Mutex
@@ -607,7 +608,7 @@ type refusingSender struct{}
 
 func (refusingSender) Send(wire.Path, ontos.Value) error { return errors.New("carrier refused") }
 
-func TestObservation11RegistrationBeforeAdmission(t *testing.T) {
+func TestObservation12RegistrationBeforeAdmission(t *testing.T) {
 	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, refusingSender{}, DefaultLimits)
 	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), text("1")})
 	w := NewEndpoint(1)
@@ -626,7 +627,7 @@ func TestObservation11RegistrationBeforeAdmission(t *testing.T) {
 	}
 }
 
-func TestObservation12Ordering(t *testing.T) {
+func TestObservation14Ordering(t *testing.T) {
 	carriers(t, func(t *testing.T, carrier string) {
 		tr := newTree(t, carrier, "client", "provider")
 		var mu sync.Mutex
@@ -651,7 +652,7 @@ func TestObservation12Ordering(t *testing.T) {
 	})
 }
 
-func TestObservation13Bounds(t *testing.T) {
+func TestObservation15Bounds(t *testing.T) {
 	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, refusingSender{}, Limits{Exports: 2, Nodes: 8, Depth: 3, Bytes: 64})
 	target := s.Connect(Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), text("1")})
 	deep := Value(text("x"))
@@ -686,4 +687,176 @@ func TestObservation13Bounds(t *testing.T) {
 		d := tr.diagnostics()
 		return len(d) == 1 && errors.Is(d[0].err, TargetRefused)
 	})
+}
+
+// Observation 8: one reference grants its own Wire and no sibling, including an
+// endpoint the owner exported for another holder.
+func TestObservation8SiblingForgery(t *testing.T) {
+	carriers(t, func(t *testing.T, carrier string) {
+		tr := newTree(t, carrier, "client", "provider", "third")
+		provider := tr.parts["provider"].scope()
+		var mu sync.Mutex
+		private := 0
+		_, public := serve(t, provider, func(Value, Context) {})
+		_, intended := serve(t, provider, func(Value, Context) { mu.Lock(); private++; mu.Unlock() })
+		// The private endpoint really is held by another participant.
+		if err := tr.parts["third"].scope().Connect(intended).Send(text("legitimate")); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "the intended holder was not served", func() bool { mu.Lock(); defer mu.Unlock(); return private == 1 })
+		if public.ID.Len() != 16 || public.ID.Equal(intended.ID) {
+			t.Fatalf("export ids %x and %x", public.ID.Bytes(), intended.ID.Bytes())
+		}
+		// The client holds only the public reference, and so knows the scope token.
+		client := tr.parts["client"].scope()
+		bump := append([]byte(nil), public.ID.Bytes()...)
+		bump[15]++
+		forged := []ontos.Atom{ontos.NewAtom(bump), ontos.NewAtom(make([]byte, 16)), text("2"), text("0000000000000002")}
+		for _, id := range forged {
+			_ = client.Connect(Reference{public.Path, public.Scope, id}).Send(text("forged"))
+		}
+		eventually(t, "forged references were not refused", func() bool { return len(tr.diagnostics()) == len(forged) })
+		for _, d := range tr.diagnostics() {
+			if d.who != "provider" || !(errors.Is(d.err, UnknownExport) || errors.Is(d.err, MalformedFrame)) {
+				t.Fatalf("forged reference: %+v", d)
+			}
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if private != 1 {
+			t.Fatalf("the private endpoint received %d deliveries, want only the legitimate one", private)
+		}
+	})
+}
+
+type recordingSender struct {
+	mu     sync.Mutex
+	frames []ontos.Value
+}
+
+func (r *recordingSender) Send(_ wire.Path, v ontos.Value) error {
+	r.mu.Lock()
+	r.frames = append(r.frames, v)
+	r.mu.Unlock()
+	return nil
+}
+
+// Observation 13: concurrent sends agree on one export per face, and never pass
+// the export bound.
+func TestObservation13ConcurrentSends(t *testing.T) {
+	run := func(n int, f func(i int)) {
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); <-start; f(i) }()
+		}
+		close(start)
+		wg.Wait()
+	}
+	dest := Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))}
+	rec := &recordingSender{}
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, rec, DefaultLimits)
+	target := s.Connect(dest)
+	face := NewEndpoint(1)
+	run(32, func(int) {
+		if err := target.Send(tuple(t, face)); err != nil {
+			t.Error(err)
+		}
+	})
+	if s.Live() != 1 || len(rec.frames) != 32 {
+		t.Fatalf("one face: %d exports, %d frames", s.Live(), len(rec.frames))
+	}
+	registered := s.byEndpoint[face]
+	for _, f := range rec.frames {
+		leaf := f.(ontos.Tuple).At(3).(ontos.Tuple).At(1).(ontos.Tuple).At(0) // body (01, ((02, ref)))
+		ref, err := readReference(leaf.(ontos.Tuple).At(1), DefaultLimits.Depth)
+		if err != nil || !ref.ID.Equal(registered) {
+			t.Fatal("a frame names an id that was not registered")
+		}
+	}
+
+	bounded, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, &recordingSender{}, Limits{Exports: 4, Nodes: 64, Depth: 8, Bytes: 1 << 16})
+	to := bounded.Connect(dest)
+	var mu sync.Mutex
+	refused := 0
+	run(8, func(int) {
+		if err := to.Send(tuple(t, NewEndpoint(1))); errors.Is(err, Limit) {
+			mu.Lock()
+			refused++
+			mu.Unlock()
+		} else if err != nil {
+			t.Error(err)
+		}
+	})
+	if bounded.Live() != 4 || refused != 4 {
+		t.Fatalf("bound 4: %d live, %d refused", bounded.Live(), refused)
+	}
+}
+
+// Observation 15, incoming: a frame counts whole against the byte bound,
+// reference material included, and nothing is delivered.
+func TestObservation15IncomingFrameBytes(t *testing.T) {
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, nil, Limits{Exports: 4, Nodes: 64, Depth: 8, Bytes: 128})
+	target := NewEndpoint(4)
+	ref, _ := s.Expose(target)
+	huge := Reference{wire.Path{ontos.NewAtom(make([]byte, 4096))}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))}
+	body := ontos.NewTuple(tupleTag, ontos.NewTuple(huge.value()))
+	if err := s.Deliver(s.path, ontos.NewTuple(header, ref.Scope, ref.ID, body), nil); !errors.Is(err, Limit) {
+		t.Fatalf("an oversized reference: %v", err)
+	}
+	if target.pending() != 0 {
+		t.Fatal("an oversized frame was delivered")
+	}
+}
+
+// Observation 17: the Endpoint laws hold on every path. A local send conveys only
+// the sending face; a stale detach removes only its own receiver; a receiver's
+// failure terminates its endpoint, which ends its export.
+func TestObservation17EndpointLaws(t *testing.T) {
+	got := make(chan Value, 2)
+	local := NewEndpoint(4)
+	if _, err := local.Receive(func(v Value, _ Context) { got <- v }); err != nil {
+		t.Fatal(err)
+	}
+	private := NewEndpoint(1)
+	_ = local.Wire().Send(private)
+	_ = local.Wire().Send(tuple(t, private))
+	if v := <-got; v != private.Wire() {
+		t.Fatalf("a bare endpoint arrived as %T", v)
+	}
+	if v := <-got; items(t, v)[0] != private.Wire() {
+		t.Fatal("an endpoint inside a tuple kept its receive and close authority")
+	}
+
+	e := NewEndpoint(4)
+	stale, _ := e.Receive(func(Value, Context) {})
+	stale()
+	seen := make(chan Value, 1)
+	if _, err := e.Receive(func(v Value, _ Context) { seen <- v }); err != nil {
+		t.Fatal(err)
+	}
+	stale()
+	_ = e.Send(text("after"))
+	select {
+	case <-seen:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a stale detach removed the newer receiver")
+	}
+
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, nil, DefaultLimits)
+	failing := NewEndpoint(4)
+	if _, err := failing.Receive(func(Value, Context) { panic("receiver fault") }); err != nil {
+		t.Fatal(err)
+	}
+	ref, _ := s.Expose(failing)
+	if err := s.Deliver(s.path, ontos.NewTuple(header, ref.Scope, ref.ID, text("x")), nil); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the failing receiver did not terminate its endpoint", func() bool {
+		return failing.Failure() != nil && s.Live() == 0
+	})
+	if err := s.Deliver(s.path, ontos.NewTuple(header, ref.Scope, ref.ID, text("y")), nil); !errors.Is(err, UnknownExport) {
+		t.Fatalf("after termination: %v", err)
+	}
 }

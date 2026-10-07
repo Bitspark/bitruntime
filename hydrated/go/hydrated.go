@@ -11,6 +11,7 @@ package hydrated
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -59,9 +60,14 @@ var (
 // the ground tuple when there is none (D1).
 type Tuple struct{ items []Value }
 
-// NewTuple captures items. Each must be an ontos value, a Tuple or a Wire.
+// NewTuple captures items. Each must be an ontos value, a Tuple or a Wire. An
+// Endpoint is captured as its sending face: a value never carries receive or
+// close authority, on any path (D7).
 func NewTuple(items ...Value) (Value, error) {
-	captured := append([]Value(nil), items...)
+	captured := make([]Value, len(items))
+	for i, item := range items {
+		captured[i] = sendOnly(item)
+	}
 	ground := make([]ontos.Value, 0, len(captured))
 	live := false
 	for _, item := range captured {
@@ -80,6 +86,14 @@ func NewTuple(items ...Value) (Value, error) {
 		return Tuple{captured}, nil
 	}
 	return ontos.NewTuple(ground...), nil
+}
+
+// sendOnly projects an Endpoint to its sending face.
+func sendOnly(v Value) Value {
+	if e, ok := v.(*Endpoint); ok {
+		return e.face
+	}
+	return v
 }
 
 // Items returns the tuple's items.
@@ -146,6 +160,8 @@ type Endpoint struct {
 	queue   []delivery
 	limit   int
 	handler func(Value, Context)
+	gen     uint64 // receiver generation: a detach removes only its own receiver
+	failure error  // set when a receiver failed and so terminated the endpoint
 	closed  bool
 	done    chan struct{}
 	wake    chan struct{}
@@ -161,7 +177,7 @@ type delivery struct {
 // face is an Endpoint's sending face. It grants sending only.
 type face struct{ e *Endpoint }
 
-func (f *face) Send(v Value) error { return f.e.admit(v, Local{}) }
+func (f *face) Send(v Value) error { return f.e.admit(sendOnly(v), Local{}) }
 
 // NewEndpoint creates an endpoint whose queue admits at most limit values.
 func NewEndpoint(limit int) *Endpoint {
@@ -178,7 +194,7 @@ func NewEndpoint(limit int) *Endpoint {
 func (e *Endpoint) Wire() Wire { return e.face }
 
 // Send admits a value locally, as its sending face does.
-func (e *Endpoint) Send(v Value) error { return e.admit(v, Local{}) }
+func (e *Endpoint) Send(v Value) error { return e.face.Send(v) }
 
 // Receive attaches the one receiver. Values are dispatched in admission order,
 // never inline with the admitting send.
@@ -188,13 +204,24 @@ func (e *Endpoint) Receive(handler func(Value, Context)) (detach func(), err err
 	if e.handler != nil {
 		return nil, errors.New("hydrated: receiver already attached")
 	}
+	e.gen++
+	gen := e.gen
 	e.handler = handler
 	e.signal()
 	return func() {
 		e.mu.Lock()
-		e.handler = nil
+		if e.gen == gen {
+			e.handler = nil
+		}
 		e.mu.Unlock()
 	}, nil
+}
+
+// Failure reports the receiver failure that terminated the endpoint, if any.
+func (e *Endpoint) Failure() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.failure
 }
 
 // Closed is closed when the endpoint closes.
@@ -253,9 +280,26 @@ func (e *Endpoint) dispatch() {
 			d, h := e.queue[0], e.handler
 			e.queue = e.queue[1:]
 			e.mu.Unlock()
-			h(d.value, d.context)
+			if err := deliverTo(h, d); err != nil {
+				// A receiver failure terminates the endpoint, which ends its export.
+				e.mu.Lock()
+				e.failure = err
+				e.mu.Unlock()
+				_ = e.Close()
+				return
+			}
 		}
 	}
+}
+
+func deliverTo(h func(Value, Context), d delivery) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("hydrated: receiver failed: %v", r)
+		}
+	}()
+	h(d.value, d.context)
+	return nil
 }
 
 // register records an export; it refuses a closed endpoint.
@@ -307,13 +351,13 @@ var DefaultLimits = Limits{Exports: 64, Nodes: 4096, Depth: 64, Bytes: 1 << 20}
 
 // Scope is one participant's hydration state for one incarnation (Terms).
 type Scope struct {
+	encodeMu   sync.Mutex // encoding and registration are one step per scope (D5)
 	mu         sync.Mutex
 	path       wire.Path
 	token      ontos.Atom
 	ns         *Namespace
 	sender     wire.AddressedWire
 	limits     Limits
-	next       uint64
 	byID       map[string]*Endpoint
 	byEndpoint map[*Endpoint]ontos.Atom
 	closed     bool
@@ -348,6 +392,8 @@ func (s *Scope) Live() int {
 // Expose exports an endpoint's face for composition bootstrap, such as a
 // service's well-known reference. Domain adapters never call it.
 func (s *Scope) Expose(e *Endpoint) (Reference, error) {
+	s.encodeMu.Lock()
+	defer s.encodeMu.Unlock()
 	staged := map[*Endpoint]ontos.Atom{}
 	id, err := s.exportID(e, staged)
 	if err != nil {
@@ -384,8 +430,9 @@ func (s *Scope) withdraw(e *Endpoint, id ontos.Atom) {
 	s.mu.Unlock()
 }
 
-// exportID returns e's export id in this scope, staging a new one if needed.
-// Ids are never reused, even when a staged export is never committed.
+// exportID returns e's export id in this scope, staging a new one if needed. A
+// new id is 16 octets from a cryptographically secure source, redrawn if it
+// equals a live or staged id, so no reference reveals another's (D3).
 func (s *Scope) exportID(e *Endpoint, staged map[*Endpoint]ontos.Atom) (ontos.Atom, error) {
 	if e.isClosed() {
 		return ontos.Atom{}, Unexportable
@@ -404,10 +451,26 @@ func (s *Scope) exportID(e *Endpoint, staged map[*Endpoint]ontos.Atom) (ontos.At
 	if len(s.byEndpoint)+len(staged) >= s.limits.Exports {
 		return ontos.Atom{}, Limit
 	}
-	s.next++
-	id := ontos.NewAtom([]byte(strconv.FormatUint(s.next, 10)))
-	staged[e] = id
-	return id, nil
+	for {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err != nil {
+			return ontos.Atom{}, err
+		}
+		id := ontos.NewAtom(b)
+		if s.byID[string(b)] == nil && !stagedID(staged, id) {
+			staged[e] = id
+			return id, nil
+		}
+	}
+}
+
+func stagedID(staged map[*Endpoint]ontos.Atom, id ontos.Atom) bool {
+	for _, other := range staged {
+		if other.Equal(id) {
+			return true
+		}
+	}
+	return false
 }
 
 // commit registers staged exports before the frame is admitted (D5). An
@@ -441,8 +504,8 @@ func (s *Scope) spend(b *budget, depth, n int) error {
 	return nil
 }
 
-// send encodes v atomically, registers its new exports, then admits one frame
-// to the owner path (D5).
+// send encodes v atomically and registers its new exports in one step per
+// scope, then admits one frame to the owner path (D5).
 func (s *Scope) send(dest Reference, v Value) error {
 	s.mu.Lock()
 	closed := s.closed
@@ -450,19 +513,26 @@ func (s *Scope) send(dest Reference, v Value) error {
 	if closed {
 		return ScopeEnded
 	}
-	staged := map[*Endpoint]ontos.Atom{}
-	body, err := s.encode(v, 0, staged, &budget{})
+	frame, err := s.stage(dest, v)
 	if err != nil {
 		return err
 	}
+	return s.sender.Send(dest.Path, frame)
+}
+
+func (s *Scope) stage(dest Reference, v Value) (ontos.Value, error) {
+	s.encodeMu.Lock()
+	defer s.encodeMu.Unlock()
+	staged := map[*Endpoint]ontos.Atom{}
+	body, err := s.encode(v, 0, staged, &budget{})
+	if err != nil {
+		return nil, err
+	}
 	frame := ontos.NewTuple(header, dest.Scope, dest.ID, body)
 	if _, err := wire.EncodeMessage(frame, s.limits.Bytes); err != nil {
-		return Limit
+		return nil, Limit
 	}
-	if err := s.commit(staged); err != nil {
-		return err
-	}
-	return s.sender.Send(dest.Path, frame)
+	return frame, s.commit(staged)
 }
 
 func (s *Scope) encode(v Value, depth int, staged map[*Endpoint]ontos.Atom, b *budget) (ontos.Value, error) {
@@ -516,13 +586,16 @@ func (s *Scope) Deliver(path wire.Path, message ontos.Value, ctx Context) error 
 	if closed {
 		return ScopeEnded
 	}
+	if _, err := wire.EncodeMessage(message, s.limits.Bytes); err != nil {
+		return Limit // the whole frame counts, reference material included (D8)
+	}
 	f, ok := message.(ontos.Tuple)
 	if !ok || f.Len() != 4 || !header.Equal(f.At(0)) {
 		return MalformedFrame
 	}
 	token, ok1 := f.At(1).(ontos.Atom)
 	id, ok2 := f.At(2).(ontos.Atom)
-	if !ok1 || !ok2 || token.Len() != 16 || id.Len() < 1 || id.Len() > 16 {
+	if !ok1 || !ok2 || token.Len() != 16 || id.Len() != 16 {
 		return MalformedFrame
 	}
 	if !token.Equal(s.token) {
@@ -577,6 +650,11 @@ func (s *Scope) decode(v ontos.Value, depth int, interned map[string]Wire, b *bu
 		if err != nil {
 			return nil, err
 		}
+		for _, a := range append(append(wire.Path{}, r.Path...), r.Scope, r.ID) {
+			if err := s.spend(b, depth+1, a.Len()); err != nil {
+				return nil, err
+			}
+		}
 		return s.importRef(r, interned), nil
 	}
 	return nil, MalformedFrame
@@ -601,7 +679,7 @@ func readReference(v ontos.Value, maxDepth int) (Reference, error) {
 	}
 	scope, ok1 := t.At(1).(ontos.Atom)
 	id, ok2 := t.At(2).(ontos.Atom)
-	if !ok1 || !ok2 || scope.Len() != 16 || id.Len() < 1 || id.Len() > 16 {
+	if !ok1 || !ok2 || scope.Len() != 16 || id.Len() != 16 {
 		return Reference{}, MalformedFrame
 	}
 	return Reference{path, scope, id}, nil

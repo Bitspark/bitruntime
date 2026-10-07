@@ -11,9 +11,9 @@ import {
 } from '../../../dist/hydrated/ts/src/index.js';
 import { text, str, eventually, PATHS, tree, serve, call } from './harness.mjs';
 
-test('observation 1: vectors round-trip (bitwire#83 at 20a6b6b, pinned)', () => {
+test('observation 1: vectors round-trip (bitwire#83 revision 2, pinned)', () => {
   const raw = readFileSync(new URL('../../go/testdata/hydrated-vectors.json', import.meta.url));
-  assert.equal(createHash('sha256').update(raw).digest('hex'), '621325467a19fa5d5ad34a1805e38feadb5609ad13fe5e71e991cf87b4d77278');
+  assert.equal(createHash('sha256').update(raw).digest('hex'), 'ce6b9f0f45db9c64627bbc1ba007344a8b4dde44297cc771431a7bc122546e6f');
   const v = JSON.parse(raw);
   const from = (x) => ('atom' in x ? atom(Buffer.from(x.atom, 'hex')) : tuple(x.tuple.map(from)));
   const wires = (x) => (x instanceof Atom || x instanceof Tuple ? 0 : (items(x)?.reduce((n, c) => n + wires(c), 0) ?? 1));
@@ -153,4 +153,66 @@ test('observation 9: received context is not data', async (t) => {
   const r = await seen;
   assert.equal(r.context, 'provider-link');
   assert.ok(forged.equals(r.value));
+});
+
+for (const carrier of ['pair', 'websocket']) {
+  test(`${carrier}: observation 8, one reference grants no sibling`, async (t) => {
+    const n = await tree(t, carrier, 'client', 'provider', 'third');
+    const provider = n.parts.provider.scope;
+    let privateHits = 0;
+    const [, pub] = serve(t, provider, () => {});
+    const [, intended] = serve(t, provider, () => { privateHits++; });
+    await n.parts.third.scope.connect(intended).send(text('legitimate'));
+    await eventually(() => privateHits === 1, 'the intended holder was not served');
+    assert.equal(pub.id.length, 16);
+    assert.ok(!pub.id.equals(intended.id));
+    const bump = Uint8Array.from(pub.id.bytes()); bump[15]++;
+    const forged = [atom(bump), atom(new Uint8Array(16)), text('2'), text('0000000000000002')];
+    for (const id of forged) await n.parts.client.scope.connect({ ...pub, id }).send(text('forged')).catch(() => {});
+    await eventually(() => n.diags.length === forged.length, 'forged references were not refused');
+    for (const d of n.diags) assert.ok(d.who === 'provider' && ['unknown-export', 'malformed-frame'].includes(d.reason), JSON.stringify(d));
+    assert.equal(privateHits, 1);
+  });
+}
+
+test('observation 15, incoming: a frame counts whole, reference material included', () => {
+  const s = new Scope(new Namespace('x'), [text('a')], { send: async () => {} }, { exports: 4, nodes: 64, depth: 8, bytes: 128 });
+  const target = new Endpoint(4);
+  let delivered = 0;
+  target.receive(() => { delivered++; });
+  const ref = s.expose(target);
+  const huge = tuple([atom([2]), tuple([tuple([atom(new Uint8Array(4096))]), atom(new Uint8Array(16)), atom(new Uint8Array(16))])]);
+  const frame = tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, tuple([atom([1]), tuple([huge])])]);
+  assert.throws(() => s.deliver(s.path, frame, undefined), (e) => e.reason === 'limit');
+  assert.equal(delivered, 0);
+});
+
+test('observation 17: Endpoint laws on every path', async () => {
+  const got = [];
+  const local = new Endpoint(4);
+  local.receive((v) => got.push(v));
+  const priv = new Endpoint(1);
+  await local.wire.send(priv);
+  await local.wire.send(hydratedTuple([priv]));
+  await eventually(() => got.length === 2, 'local sends not delivered');
+  assert.equal(got[0], priv.wire, 'a bare endpoint kept its authority');
+  assert.equal(items(got[1])[0], priv.wire, 'an endpoint inside a tuple kept its authority');
+  assert.equal('close' in got[0], false);
+
+  const e = new Endpoint(4);
+  const stale = e.receive(() => {});
+  stale();
+  let seen = 0;
+  e.receive(() => { seen++; });
+  stale();
+  await e.send(text('after'));
+  await eventually(() => seen === 1, 'a stale detach removed the newer receiver');
+
+  const s = new Scope(new Namespace('x'), [text('a')], { send: async () => {} });
+  const failing = new Endpoint(4);
+  failing.receive(() => { throw new Error('receiver fault'); });
+  const ref = s.expose(failing);
+  s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('x')]), undefined);
+  await eventually(() => failing.failure !== undefined && s.live === 0, 'the failing receiver did not terminate its endpoint');
+  assert.throws(() => s.deliver(s.path, tuple([text('bitwire/hydrated/1'), ref.scope, ref.id, text('y')]), undefined), (e) => e.reason === UNKNOWN_EXPORT);
 });
