@@ -1,4 +1,4 @@
-// Observations of bitwire decision 0019 (proposed) for the TypeScript evidence;
+// Observations of bitwire decision 0019 for the TypeScript realization;
 // hydrated/go runs all thirteen, this suite the ones a second language must repeat.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

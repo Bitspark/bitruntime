@@ -1,6 +1,6 @@
 # bitruntime
 
-Go and TypeScript implementations of [bitwire 0.5.0](https://github.com/Bitspark/bitwire/tree/v0.5.0): addressless endpoints, addressed access, complete byte-keyed trees, local pairs and WebSocket carriers.
+Go and TypeScript implementations of [bitwire 0.6.0](https://github.com/Bitspark/bitwire/tree/v0.6.0): addressless endpoints, addressed access, complete byte-keyed trees, local pairs and WebSocket carriers, and the hydrated layer of [decision 0019](https://github.com/Bitspark/bitwire/blob/v0.6.0/docs/decisions/0019-hydrated-wire-protocol.md) ([hydrated/README.md](hydrated/README.md)).
 
 Wire grants sending ground ontos values. Endpoint adds one detachable receive owner, termination and closure. AddressedWire adds a separate path parameter; an AddressedEndpoint presents that layer over an existing endpoint. WireNode is a complete deixis tree whose own values are send capabilities.
 
@@ -9,7 +9,7 @@ Wire grants sending ground ontos values. Endpoint adds one detachable receive ow
 Install the release package and shared contract:
 
 ```sh
-npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.5.0 https://github.com/Bitspark/bitruntime/releases/download/v0.6.0/bitspark-bitruntime-0.6.0.tgz
+npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.6.0 https://github.com/Bitspark/bitruntime/releases/download/v0.7.0/bitspark-bitruntime-0.7.0.tgz
 ```
 
 ```ts
@@ -62,6 +62,7 @@ npm ci --ignore-scripts
 npm run check
 npm test
 node scripts/interop.mjs
+node scripts/hydrated-interop.mjs
 node scripts/package-smoke.mjs
 ```
 

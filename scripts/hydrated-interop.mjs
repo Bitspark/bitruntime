@@ -1,4 +1,4 @@
-// Observation 14 of bitwire decision 0019 (proposed): Go and TypeScript peers
+// Observation 16 of bitwire decision 0019: Go and TypeScript peers
 // exchange bitwire/hydrated/1 frames over a real WebSocket, each in both roles.
 // The exchange: a request carrying a reply Wire, a reply carrying a continuation
 // Wire, and a third Wire sent back through the continuation.
