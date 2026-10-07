@@ -37,3 +37,7 @@ jobs:
       - run: node scripts/package-smoke.mjs
       - run: node scripts/interop.mjs
       - run: node scripts/hydrated-interop.mjs
+      # The release runs this against its tag; run it here against the pushed
+      # commit so the public-module consumer is exercised on Linux before a tag.
+      - name: Go module consumer from the pushed commit
+        run: node scripts/go-smoke.mjs "${{ github.event.pull_request.head.sha || github.sha }}"

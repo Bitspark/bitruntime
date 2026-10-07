@@ -9,7 +9,7 @@ Wire grants sending ground ontos values. Endpoint adds one detachable receive ow
 Install the release package and shared contract:
 
 ```sh
-npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.6.0 https://github.com/Bitspark/bitruntime/releases/download/v0.7.0/bitspark-bitruntime-0.7.0.tgz
+npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.6.0 https://github.com/Bitspark/bitruntime/releases/download/v0.7.1/bitspark-bitruntime-0.7.1.tgz
 ```
 
 ```ts
@@ -34,7 +34,7 @@ A raw endpoint can send an atom directly. The addressed facade works on the same
 ## Go
 
 ```sh
-go get github.com/Bitspark/bitruntime@v0.7.0
+go get github.com/Bitspark/bitruntime@v0.7.1
 ```
 
 Use `core/go.NewPair` and `websocket/go.Dial`, `Accept`, `NewServer` or `Listen`. They return bitwire Endpoints. `core/go.Addressed`, `Bind`, `Under` and `AsAddressed` implement the same layering as TypeScript; absent tree paths return ErrMissingPath. `hydrated/go` provides `NewScope`, `NewEndpoint`, `NewNamespace` and `NewTuple` over bitwire's hydrated declarations. A receiver runs on its endpoint's dispatcher. Close does not wait for or cancel dispatched application work.
