@@ -50,9 +50,12 @@ export class HydratedTuple {
 // Any Wire may sit in a tuple; encoding refuses one the runtime does not own (D7).
 const isWire = (v: unknown): v is Wire => typeof (v as Wire | undefined)?.send === 'function';
 
+/** An Endpoint travels only as its sending face, on every path (D7). */
+const sendOnly = (v: Value): Value => (v instanceof Endpoint ? v.wire : v);
+
 /** Captures items; returns the ground tuple when no Wire is beneath them. */
 export function hydratedTuple(items: readonly Value[]): Value {
-  const captured = [...items];
+  const captured = items.map(sendOnly);
   let live = false;
   for (const item of captured) {
     if (item instanceof HydratedTuple || isWire(item)) live = true;
@@ -92,6 +95,8 @@ export class Endpoint implements Wire {
   #queue: { value: Value; context: Context }[] = [];
   #limit: number;
   #handler: ((value: Value, context: Context) => void) | undefined;
+  #generation = 0;
+  #failure: unknown;
   #isClosed = false;
   #draining = false;
   #resolveClosed!: () => void;
@@ -105,12 +110,17 @@ export class Endpoint implements Wire {
 
   send(value: Value): Promise<void> { return this.wire.send(value); }
 
+  /** Attaches the one receiver; its detach removes only that receiver. */
   receive(handler: (value: Value, context: Context) => void): () => void {
     if (this.#handler) throw new Error('hydrated: receiver already attached');
+    const generation = ++this.#generation;
     this.#handler = handler;
     this.#drain();
-    return () => { this.#handler = undefined; };
+    return () => { if (this.#generation === generation) this.#handler = undefined; };
   }
+
+  /** The receiver failure that terminated the endpoint, if any. */
+  get failure(): unknown { return this.#failure; }
 
   async close(): Promise<void> {
     if (this.#isClosed) return;
@@ -148,19 +158,25 @@ export class Endpoint implements Wire {
       this.#draining = false;
       while (!this.#isClosed && this.#handler && this.#queue.length) {
         const d = this.#queue.shift()!;
-        this.#handler(d.value, d.context);
+        try {
+          this.#handler(d.value, d.context);
+        } catch (error) {
+          // A receiver failure terminates the endpoint, which ends its export.
+          this.#failure = error;
+          void this.close();
+        }
       }
     });
   }
 }
 
+/** Each face's owner, private to this module: a face reveals no endpoint. */
+const owners = new WeakMap<Face, Endpoint>();
+
 /** An Endpoint's sending face. It grants sending only. */
 class Face implements Wire {
-  readonly #endpoint: Endpoint;
-  constructor(endpoint: Endpoint) { this.#endpoint = endpoint; Object.freeze(this); }
-  async send(value: Value): Promise<void> { this.#endpoint._admit(value, LOCAL); }
-  /** @internal */
-  get _endpoint(): Endpoint { return this.#endpoint; }
+  constructor(endpoint: Endpoint) { owners.set(this, endpoint); Object.freeze(this); }
+  async send(value: Value): Promise<void> { owners.get(this)!._admit(sendOnly(value), LOCAL); }
 }
 
 /**
@@ -196,7 +212,6 @@ export class Scope {
   readonly ns: Namespace;
   readonly #sender: AddressedWire;
   readonly #limits: Limits;
-  #next = 0n;
   readonly #byId = new Map<string, Endpoint>();
   readonly #byEndpoint = new Map<Endpoint, Atom>();
   #closed = false;
@@ -245,9 +260,14 @@ export class Scope {
     const known = staged.get(endpoint) ?? this.#byEndpoint.get(endpoint);
     if (known) return known;
     if (this.#byEndpoint.size + staged.size >= this.#limits.exports) throw new Refusal(LIMIT);
-    const id = atom(new TextEncoder().encode(String(++this.#next)));
-    staged.set(endpoint, id);
-    return id;
+    // 16 octets from a secure source, redrawn on collision: no reference reveals another's (D3).
+    for (;;) {
+      const id = atom(crypto.getRandomValues(new Uint8Array(16)));
+      if (!this.#byId.has(hex(id)) && ![...staged.values()].some((other) => other.equals(id))) {
+        staged.set(endpoint, id);
+        return id;
+      }
+    }
   }
 
   #commit(staged: Map<Endpoint, Atom>): void {
@@ -288,7 +308,7 @@ export class Scope {
     if (v instanceof Endpoint) return this._encode(v.wire, depth, staged, b);
     if (v instanceof Face) {
       this.#spend(b, depth, 0);
-      return refValue({ path: this.path, scope: this.token, id: this.#exportId(v._endpoint, staged) });
+      return refValue({ path: this.path, scope: this.token, id: this.#exportId(owners.get(v)!, staged) });
     }
     if (v instanceof Proxy) {
       if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
@@ -303,9 +323,11 @@ export class Scope {
   deliver(path: Path, message: Atom | Tuple, context: Context): void {
     if (!pathEqual(path, this.path)) throw new Refusal(MALFORMED_FRAME);
     if (this.#closed) throw new Refusal(SCOPE_ENDED);
+    // The whole frame counts against the byte bound, reference material included (D8).
+    try { encodeMessage(message, this.#limits.bytes); } catch { throw new Refusal(LIMIT); }
     if (!(message instanceof Tuple) || message.length !== 4 || !HEADER.equals(message.at(0)!)) throw new Refusal(MALFORMED_FRAME);
     const [, token, id, body] = message.items();
-    if (!(token instanceof Atom) || !(id instanceof Atom) || token.length !== 16 || id.length < 1 || id.length > 16) throw new Refusal(MALFORMED_FRAME);
+    if (!(token instanceof Atom) || !(id instanceof Atom) || token.length !== 16 || id.length !== 16) throw new Refusal(MALFORMED_FRAME);
     if (!token.equals(this.token)) throw new Refusal(STALE_SCOPE);
     const target = this.#byId.get(hex(id));
     if (!target) throw new Refusal(UNKNOWN_EXPORT);
@@ -325,7 +347,11 @@ export class Scope {
       if (!(payload instanceof Tuple)) throw new Refusal(MALFORMED_FRAME);
       return hydratedTuple(payload.items().map((c) => this._decode(c, depth + 1, interned, b)));
     }
-    if (tag.equals(WIRE_TAG)) return this.#import(readReference(payload!, this.#limits.depth), interned);
+    if (tag.equals(WIRE_TAG)) {
+      const ref = readReference(payload!, this.#limits.depth);
+      for (const a of [...ref.path, ref.scope, ref.id]) this.#spend(b, depth + 1, a.length);
+      return this.#import(ref, interned);
+    }
     throw new Refusal(MALFORMED_FRAME);
   }
 
@@ -349,7 +375,7 @@ export function readReference(v: Atom | Tuple, maxDepth: number = DEFAULT_LIMITS
   const [p, scope, id] = v.items();
   if (!(p instanceof Tuple) || p.length > maxDepth) throw new Refusal(MALFORMED_FRAME);
   const path = p.items().map((s) => { if (!(s instanceof Atom)) throw new Refusal(MALFORMED_FRAME); return s; });
-  if (!(scope instanceof Atom) || !(id instanceof Atom) || scope.length !== 16 || id.length < 1 || id.length > 16) throw new Refusal(MALFORMED_FRAME);
+  if (!(scope instanceof Atom) || !(id instanceof Atom) || scope.length !== 16 || id.length !== 16) throw new Refusal(MALFORMED_FRAME);
   return Object.freeze({ path: Object.freeze(path), scope, id });
 }
 
