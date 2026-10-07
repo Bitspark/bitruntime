@@ -328,3 +328,23 @@ test('observation 15, depth: a deep permitted value round-trips without exhausti
   assert.equal(depth, 15000);
   assert.ok(x.equals(text('leaf')), 'the deep value changed');
 });
+
+test('observation 15, allocation: wide tuples are not copied; a repeated reference path is copied once', async () => {
+  const dest = { path: [text('b')], scope: atom(new Uint8Array(16)), id: atom(new Uint8Array(16)) };
+  const tight = new Scope(new Namespace('x'), [text('a')], { send: async () => {} }, { exports: 4, nodes: 4, depth: 8, bytes: 4096 });
+  const wide = tuple(Array.from({ length: 200000 }, () => text('w')));
+  let copies = 0;
+  const original = Tuple.prototype.items;
+  Tuple.prototype.items = function () { copies++; return original.call(this); };
+  try {
+    await assert.rejects(tight.connect(dest).send(wide), (e) => e.reason === 'limit');
+  } finally { Tuple.prototype.items = original; }
+  assert.equal(copies, 0, 'the wide tuple was copied before the budget refused it');
+
+  const s = new Scope(new Namespace('x'), [text('a')], { send: async () => {} });
+  const far = s.connect({ path: Array.from({ length: 20000 }, () => atom(new Uint8Array(0))), scope: atom(new Uint8Array(16)), id: atom(new Uint8Array(16)) });
+  const v = hydratedTuple(Array.from({ length: 300 }, () => far));
+  const start = Date.now();
+  await assert.rejects(s.connect(dest).send(v), (e) => e.reason === 'limit');
+  assert.ok(Date.now() - start < 5000, 'the repeated path was expanded');
+});

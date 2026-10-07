@@ -577,8 +577,47 @@ func (s *Scope) stage(dest Reference, v wire.HydratedValue) (ontos.Value, error)
 	return frame, s.commit(staged)
 }
 
-// budget counts a value as D8 does, while converting it.
-type budget struct{ nodes, bytes int }
+// budget counts a value as D8 does, while converting it. refs holds one
+// descriptor per distinct face or proxy, shared by all its occurrences, and
+// paths the least encoded size of the paths those descriptors copied.
+type budget struct {
+	nodes, bytes, paths int
+	refs                map[wire.HydratedWire]wire.HydratedReference
+}
+
+// leastPathBytes is a lower bound on a path's encoded size: a tag and a length
+// octet per segment, plus its bytes. A frame holding the path is at least this
+// large, so refusing beyond the byte bound never refuses a valid value.
+func leastPathBytes(path wire.Path) int {
+	n := 0
+	for _, a := range path {
+		n += 2 + a.Len()
+	}
+	return n
+}
+
+// reference returns w's descriptor, copying its path once per conversion.
+func (s *Scope) reference(b *budget, w wire.HydratedWire, path wire.Path, scope ontos.Atom, id func() (ontos.Atom, error)) (wire.HydratedData, error) {
+	if r, ok := b.refs[w]; ok {
+		return r, nil
+	}
+	if b.paths += leastPathBytes(path); b.paths > s.limits.Bytes {
+		return nil, Limit
+	}
+	i, err := id()
+	if err != nil {
+		return nil, err
+	}
+	r, err := wire.NewHydratedReference(path, scope, i)
+	if err != nil {
+		return nil, refusal(err)
+	}
+	if b.refs == nil {
+		b.refs = map[wire.HydratedWire]wire.HydratedReference{}
+	}
+	b.refs[w] = r
+	return r, nil
+}
 
 // refBytes is a Wire leaf's value bytes under D8: its path bytes and 32.
 func refBytes(path wire.Path) int {
@@ -613,10 +652,12 @@ func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ont
 		if err := s.spend(b, depth, 0); err != nil {
 			return nil, err
 		}
-		items, _ := Items(x)
-		out := make([]wire.HydratedData, 0, len(items))
-		for _, item := range items {
-			d, err := s.toData(item, depth+1, staged, b)
+		// Index the tuple and grow the output as children are counted: nothing
+		// is copied or reserved at the tuple's size before the budget allows it.
+		n, at := tupleIndex(x)
+		var out []wire.HydratedData
+		for i := 0; i < n; i++ {
+			d, err := s.toData(at(i), depth+1, staged, b)
 			if err != nil {
 				return nil, err
 			}
@@ -630,12 +671,7 @@ func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ont
 		if err := s.spend(b, depth, refBytes(s.path)); err != nil {
 			return nil, err
 		}
-		id, err := s.exportID(x.e, staged)
-		if err != nil {
-			return nil, err
-		}
-		r, err := wire.NewHydratedReference(s.path, s.token, id)
-		return r, refusal(err)
+		return s.reference(b, x, s.path, s.token, func() (ontos.Atom, error) { return s.exportID(x.e, staged) })
 	case *proxy:
 		if x.ns != s.ns {
 			return nil, ForeignNamespace
@@ -643,12 +679,22 @@ func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ont
 		if err := s.spend(b, depth, refBytes(x.ref.Path)); err != nil {
 			return nil, err
 		}
-		r, err := x.ref.data()
-		return r, refusal(err)
+		return s.reference(b, x, x.ref.Path, x.ref.Scope, func() (ontos.Atom, error) { return x.ref.ID, nil })
 	case wire.HydratedWire:
 		return nil, Unexportable
 	}
 	return nil, errors.New("hydrated: not a value")
+}
+
+// tupleIndex gives a tuple's length and indexed access without copying it.
+func tupleIndex(v wire.HydratedValue) (int, func(int) wire.HydratedValue) {
+	switch x := v.(type) {
+	case ontos.Tuple:
+		return x.Len(), func(i int) wire.HydratedValue { return x.At(i) }
+	case Tuple:
+		return len(x.items), func(i int) wire.HydratedValue { return x.items[i] }
+	}
+	return 0, nil
 }
 
 // fromData maps decoded structural data onto live values. Occurrences of one

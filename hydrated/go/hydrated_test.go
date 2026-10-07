@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1072,5 +1073,48 @@ func TestObservation15DeepPermittedValue(t *testing.T) {
 	}
 	if !(<-got).(ontos.Tuple).Equal(v.(ontos.Value)) {
 		t.Fatal("the deep value changed")
+	}
+}
+
+// allocated reports the bytes allocated while f runs.
+func allocated(f func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// Observation 15, allocation: a refused value costs memory bounded by the
+// limits, not by the value. A wide tuple is neither copied nor reserved at its
+// size, and a repeated reference copies its path once.
+func TestObservation15RefusalAllocationIsBounded(t *testing.T) {
+	dest := Reference{wire.Path{text("b")}, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))}
+	tight, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, &recordingSender{}, Limits{Exports: 4, Nodes: 4, Depth: 8, Bytes: 4096})
+	wide := make([]ontos.Value, 200000)
+	for i := range wide {
+		wide[i] = text("w")
+	}
+	wideTuple := ontos.NewTuple(wide...)
+	to := tight.Connect(dest)
+	var err error
+	if n := allocated(func() { err = to.Send(wideTuple) }); !errors.Is(err, Limit) || n > 64<<10 {
+		t.Fatalf("a wide tuple under nodes 4: %v after %d bytes", err, n)
+	}
+
+	s, _ := NewScope(NewNamespace("x"), wire.Path{text("a")}, &recordingSender{}, DefaultLimits)
+	empty := make(wire.Path, 20000)
+	for i := range empty {
+		empty[i] = ontos.NewAtom(nil)
+	}
+	far := s.Connect(Reference{empty, ontos.NewAtom(make([]byte, 16)), ontos.NewAtom(make([]byte, 16))})
+	occurrences := make([]wire.HydratedValue, 300)
+	for i := range occurrences {
+		occurrences[i] = far
+	}
+	v := tuple(t, occurrences...)
+	if n := allocated(func() { err = s.Connect(dest).Send(v) }); !errors.Is(err, Limit) || n > 32<<20 {
+		t.Fatalf("a repeated long reference path: %v after %d bytes", err, n)
 	}
 }

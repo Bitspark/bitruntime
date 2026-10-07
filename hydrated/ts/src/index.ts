@@ -114,6 +114,11 @@ const codec = <T>(f: () => T): T => { try { return f(); } catch (error) { return
 const codecLimits = (l: Limits): HydratedCodecLimits => ({ nodes: l.nodes, depth: l.depth, bytes: l.bytes });
 /** A Wire leaf's value bytes under D8: its path bytes and 32. */
 const refBytes = (path: Path): number => path.reduce((n, a) => n + a.length, 32);
+/**
+ * A lower bound on a path's encoded size (a tag and a length octet per segment,
+ * plus its bytes): a frame holding the path is at least this large.
+ */
+const leastPathBytes = (path: Path): number => path.reduce((n, a) => n + 2 + a.length, 0);
 
 /**
  * A local HydratedEndpoint: one receiver, ordered dispatch never inline with the
@@ -342,28 +347,41 @@ export class Scope {
     // value with shared subtrees cannot expand past the bounds; iterate, so a deep
     // permitted value cannot exhaust the stack. The codec stays authoritative.
     const limits = this.#limits;
-    let nodes = 0, bytes = 0;
+    let nodes = 0, bytes = 0, paths = 0;
+    // One descriptor per distinct face or proxy, shared by its occurrences; its
+    // path is copied once and counted against the byte bound before copying.
+    const refs = new Map<HydratedWire, HydratedReference>();
+    const reference = (w: HydratedWire, path: Path, scope: Atom, id: () => Atom): HydratedReference => {
+      const known = refs.get(w);
+      if (known) return known;
+      paths += leastPathBytes(path);
+      if (paths > limits.bytes) throw new Refusal(LIMIT);
+      const r = codec(() => new HydratedReference(path, scope, id()));
+      refs.set(w, r);
+      return r;
+    };
     const spend = (depth: number, n: number) => {
       nodes++; bytes += n;
       if (nodes > limits.nodes || depth > limits.depth || bytes > limits.bytes) throw new Refusal(LIMIT);
     };
-    const frames: { items: readonly HydratedValue[]; depth: number; out: HydratedData[] }[] = [];
+    // Tuples are indexed, never copied; outputs grow as children are counted.
+    const frames: { tuple: Tuple | HydratedTuple; depth: number; out: HydratedData[] }[] = [];
     const visit = (value: HydratedValue, depth: number): HydratedData | undefined => {
       const v = value instanceof Endpoint ? value.wire : value;
       if (v instanceof Atom) { spend(depth, v.length); return new HydratedDataAtom(v); }
       if (v instanceof Tuple || v instanceof HydratedTuple) {
         spend(depth, 0);
-        frames.push({ items: items(v)!, depth, out: [] });
+        frames.push({ tuple: v, depth, out: [] });
         return undefined;
       }
       if (v instanceof Face) {
         spend(depth, refBytes(this.path));
-        return codec(() => new HydratedReference(this.path, this.token, this.#exportId(owners.get(v)!, staged)));
+        return reference(v, this.path, this.token, () => this.#exportId(owners.get(v)!, staged));
       }
       if (v instanceof Proxy) {
         if (v.ns !== this.ns) throw new Refusal(FOREIGN_NAMESPACE);
         spend(depth, refBytes(v.ref.path));
-        return codec(() => new HydratedReference(v.ref.path, v.ref.scope, v.ref.id));
+        return reference(v, v.ref.path, v.ref.scope, () => v.ref.id);
       }
       if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
       throw new TypeError('hydrated: not a value');
@@ -372,8 +390,8 @@ export class Scope {
     if (first) return first;
     for (;;) {
       const top = frames[frames.length - 1]!;
-      if (top.out.length < top.items.length) {
-        const child = visit(top.items[top.out.length]!, top.depth + 1);
+      if (top.out.length < top.tuple.length) {
+        const child = visit(top.tuple.at(top.out.length)!, top.depth + 1);
         if (child) top.out.push(child);
         continue;
       }
