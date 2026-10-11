@@ -6,6 +6,8 @@ name: Mirror released bytes into the private scope
 # exactly the released tarball, verified against the integrity every lock pins, and nothing else.
 # Written while this repository's owner was offline, under the operator's service-matrix alignment
 # instruction (platform Chief decision 08858c6a); the owner may keep, change or remove it.
+# A package's first publication from this public repository is public on GitHub Packages whatever
+# --access says: make it private before granting consumers Read. Later versions keep its settings.
 
 on:
   workflow_dispatch:
