@@ -1,0 +1,148 @@
+name: Mirror released bytes into the private scope
+
+# A mirror of released bytes into the private @bitspark scope on GitHub Packages, for Bitspark's
+# private service consumers: npm maps a scope to one registry, so every @bitspark package their
+# packages reach must resolve there. The public distribution is unchanged. The workflow publishes
+# exactly the released tarball, verified against the integrity every lock pins, and nothing else.
+# Written while this repository's owner was offline, under the operator's service-matrix alignment
+# instruction (platform Chief decision 08858c6a); the owner may keep, change or remove it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact released version to mirror, for example 0.7.1
+        required: true
+        type: string
+      sha512:
+        description: The released tarball's integrity (sha512-...), as every lock pins it
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: mirror-private-scope
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PACKAGE: '@bitspark/bitruntime'
+      SOURCE: release
+      VERSION: ${{ inputs.version }}
+      EXPECTED_SHA512: ${{ inputs.sha512 }}
+      MIRROR: https://npm.pkg.github.com
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - run: npm install --global npm@12.2.0 --registry=https://registry.npmjs.org --ignore-scripts --no-audit --no-fund
+
+      - name: Fetch the released bytes from the canonical source and verify them
+        run: |
+          node --input-type=module <<'EOF'
+          import { createHash } from 'node:crypto';
+          import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const { PACKAGE, SOURCE, VERSION, EXPECTED_SHA512, RUNNER_TEMP, GITHUB_ENV } = process.env;
+          const fail = message => { console.error(message); process.exit(1); };
+          if (!/^\d+\.\d+\.\d+$/.test(VERSION)) fail('The version must be an exact X.Y.Z');
+          if (!/^sha512-[A-Za-z0-9+/]{86}==$/.test(EXPECTED_SHA512)) fail('The sha512 must be an SRI sha512 integrity');
+          const short = PACKAGE.split('/')[1];
+          const file = SOURCE === 'npmjs' ? `${short}-${VERSION}.tgz` : `bitspark-${short}-${VERSION}.tgz`;
+          const release = `https://github.com/Bitspark/${short}/releases/download/v${VERSION}`;
+          const url = SOURCE === 'npmjs' ? `https://registry.npmjs.org/${PACKAGE}/-/${file}` : `${release}/${file}`;
+          async function get(location) {
+            const response = await fetch(location, { redirect: 'follow', signal: AbortSignal.timeout(60_000) });
+            if (!response.ok) fail(`${location}: HTTP ${response.status}`);
+            return Buffer.from(await response.arrayBuffer());
+          }
+          const bytes = await get(url);
+          if (bytes.length > 16 * 1024 * 1024) fail('The released tarball exceeds its bound');
+          const sha256 = createHash('sha256').update(bytes).digest('hex');
+          const sha512 = 'sha512-' + createHash('sha512').update(bytes).digest('base64');
+          if (sha512 !== EXPECTED_SHA512) fail(`The released bytes' ${sha512} differ from the expected ${EXPECTED_SHA512}`);
+          let source;
+          if (SOURCE === 'npmjs') {
+            const meta = JSON.parse((await get(`https://registry.npmjs.org/${PACKAGE}/${VERSION}`)).toString('utf8'));
+            if (meta.dist?.integrity !== EXPECTED_SHA512) fail('npmjs dist.integrity differs from the expected sha512');
+            if (meta.dist?.shasum !== createHash('sha1').update(bytes).digest('hex')) fail('npmjs dist.shasum differs from the bytes');
+            source = { npmjs: { integrity: meta.dist.integrity, shasum: meta.dist.shasum, tarball: meta.dist.tarball } };
+          } else {
+            const sums = (await get(`${release}/SHA256SUMS`)).toString('utf8').split('\n').map(line => line.trim().split(/\s+\*?/));
+            const listed = sums.find(([, name]) => name === file);
+            if (!listed || listed[0] !== sha256) fail(`The release SHA256SUMS does not list ${sha256} for ${file}`);
+            source = { sha256sums: `${listed[0]}  ${listed[1]}` };
+          }
+          const directory = `${RUNNER_TEMP}/mirror`, path = `${directory}/${file}`;
+          mkdirSync(directory, { recursive: true }); writeFileSync(path, bytes);
+          const manifest = JSON.parse(execFileSync('tar', ['-xOzf', path, 'package/package.json'], { encoding: 'utf8' }));
+          if (manifest.name !== PACKAGE || manifest.version !== VERSION) fail(`The tarball is not ${PACKAGE}@${VERSION}`);
+          writeFileSync(`${directory}/source.json`, JSON.stringify({ package: PACKAGE, version: VERSION, url, bytes: bytes.length, sha256, sha512, ...source }, null, 2) + '\n');
+          appendFileSync(GITHUB_ENV, `MIRROR_FILE=${path}\nMIRROR_SHA256=${sha256}\n`);
+          console.log(`Verified ${PACKAGE}@${VERSION}: ${bytes.length} bytes, sha256 ${sha256}, ${sha512}`);
+          EOF
+
+      - name: Publish the unchanged file to the private scope
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The file holds npm's placeholder, never a token value.
+          printf '%s\n' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' > "$RUNNER_TEMP/mirror.npmrc"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/mirror.npmrc"
+          flags=(--registry="$MIRROR" --@bitspark:registry="$MIRROR")
+          if existing=$(npm view "$PACKAGE@$VERSION" version --json "${flags[@]}" 2>"$RUNNER_TEMP/view.err"); then
+            if [ -n "$existing" ]; then echo "$PACKAGE@$VERSION already exists in $MIRROR; nothing is published again."; exit 1; fi
+          elif ! grep -q 'E404' "$RUNNER_TEMP/view.err"; then
+            echo "The registry read failed for a reason other than absence; refusing."; exit 1
+          fi
+          # The tarball's own publishConfig may name another registry or access; the dry run must
+          # report exactly this target and restricted access before anything is written.
+          dry=$(npm publish "$MIRROR_FILE" "${flags[@]}" --access=restricted --ignore-scripts --provenance=false --dry-run 2>&1)
+          if ! grep -qx "npm notice Publishing to $MIRROR with tag latest and restricted access (dry-run)" <<<"$dry"; then
+            echo "The dry run does not target $MIRROR with restricted access; refusing."; grep -i 'publishing to' <<<"$dry" || true; exit 1
+          fi
+          npm publish "$MIRROR_FILE" "${flags[@]}" --access=restricted --ignore-scripts --provenance=false
+
+      - name: Read the mirror back and compare it with the released bytes
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/mirror.npmrc"
+          flags=(--registry="$MIRROR" --@bitspark:registry="$MIRROR")
+          readback="$RUNNER_TEMP/mirror/readback"; mkdir -p "$readback"
+          npm view "$PACKAGE@$VERSION" dist --json "${flags[@]}" > "$readback/packument-dist.json"
+          npm pack "$PACKAGE@$VERSION" "${flags[@]}" --pack-destination "$readback" --json > "$readback/pack.json"
+          node --input-type=module <<'EOF'
+          import { createHash } from 'node:crypto';
+          import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+          const { EXPECTED_SHA512, MIRROR_SHA256, RUNNER_TEMP, PACKAGE, VERSION } = process.env;
+          const fail = message => { console.error(message); process.exit(1); };
+          const directory = `${RUNNER_TEMP}/mirror/readback`;
+          const dist = JSON.parse(readFileSync(`${directory}/packument-dist.json`, 'utf8'));
+          const files = readdirSync(directory).filter(name => name.endsWith('.tgz'));
+          if (files.length !== 1) fail('Expected exactly one tarball read back');
+          const bytes = readFileSync(`${directory}/${files[0]}`);
+          const sha256 = createHash('sha256').update(bytes).digest('hex'), sha512 = 'sha512-' + createHash('sha512').update(bytes).digest('base64');
+          const result = { package: PACKAGE, version: VERSION, packumentIntegrity: dist.integrity, tarball: dist.tarball, bytes: bytes.length, sha256, sha512 };
+          writeFileSync(`${directory}/readback.json`, JSON.stringify(result, null, 2) + '\n');
+          if (dist.integrity !== EXPECTED_SHA512 || sha512 !== EXPECTED_SHA512 || sha256 !== MIRROR_SHA256) fail('The mirror differs from the released bytes: ' + JSON.stringify(result));
+          console.log('Read back unchanged: ' + JSON.stringify(result));
+          EOF
+
+      - name: Retain the source and readback receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mirror-private-scope-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/mirror
+          if-no-files-found: warn
+          retention-days: 90

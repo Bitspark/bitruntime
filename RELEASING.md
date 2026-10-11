@@ -5,6 +5,7 @@ One root `vX.Y.Z` tag versions the Go module and TypeScript package together. bi
 - Go module: `github.com/Bitspark/bitruntime`, packages `core/go`, `websocket/go` and `hydrated/go`.
 - TypeScript package: `@bitspark/bitruntime`, subpaths `/core`, `/websocket` and `/hydrated`.
 - TypeScript distribution: GitHub release asset `bitspark-bitruntime-<version>.tgz`, covered by `SHA256SUMS`. This is an npm-compatible tarball, not a registry publication. URL installs with npm 12 require `--allow-remote=root`.
+- Private-scope mirror: the released asset is also mirrored, byte for byte, into the private `@bitspark` scope on GitHub Packages, for Bitspark's private consumers whose `@bitspark` scope resolves there (`.github/workflows/mirror-private-scope.yml`). The public distribution above is unchanged.
 
 Before tagging, land a reviewed green PR on main. CI requires Go formatting/vet/race tests, TypeScript checking/build/tests, bitwire conformance observations, a fresh installed package consumer, and Go/TypeScript WebSocket and hydrated interoperability. Run the same checks locally where supported. Confirm bitwire's exact dependency release is publicly installable, with no file dependencies, module replacements or private registries. Run `node scripts/go-smoke.mjs <pushed-commit>` before tagging.
 
