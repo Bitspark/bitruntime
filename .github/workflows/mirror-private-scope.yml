@@ -6,6 +6,8 @@ name: Mirror released bytes into the private scope
 # exactly the released tarball, verified against the integrity every lock pins, and nothing else.
 # Written while this repository's owner was offline, under the operator's service-matrix alignment
 # instruction (platform Chief decision 08858c6a); the owner may keep, change or remove it.
+# A package's first publication from this public repository is public on GitHub Packages whatever
+# --access says: make it private before granting consumers Read. Later versions keep its settings.
 
 on:
   workflow_dispatch:
@@ -127,7 +129,10 @@ jobs:
           const { EXPECTED_SHA512, MIRROR_SHA256, RUNNER_TEMP, PACKAGE, VERSION } = process.env;
           const fail = message => { console.error(message); process.exit(1); };
           const directory = `${RUNNER_TEMP}/mirror/readback`;
-          const dist = JSON.parse(readFileSync(`${directory}/packument-dist.json`, 'utf8'));
+          // npm 12.2 prints `view <spec> dist --json` as a one-element array.
+          const viewed = JSON.parse(readFileSync(`${directory}/packument-dist.json`, 'utf8'));
+          if (Array.isArray(viewed) && viewed.length !== 1) fail('Expected one packument dist entry');
+          const dist = Array.isArray(viewed) ? viewed[0] : viewed;
           const files = readdirSync(directory).filter(name => name.endsWith('.tgz'));
           if (files.length !== 1) fail('Expected exactly one tarball read back');
           const bytes = readFileSync(`${directory}/${files[0]}`);
