@@ -9,11 +9,11 @@ Wire grants sending ground ontos values. Endpoint adds one detachable receive ow
 Install the release package and shared contract:
 
 ```sh
-npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.7.0 https://github.com/Bitspark/bitruntime/releases/download/v0.8.0/bitspark-bitruntime-0.8.0.tgz
+npm install --allow-remote=root --@bitspark:registry=https://registry.npmjs.org @bitspark/bitwire@0.7.0 @bitspark/ontos-core@0.16.0 https://github.com/Bitspark/bitruntime/releases/download/v0.8.0/bitspark-bitruntime-0.8.0.tgz
 ```
 
 ```ts
-import { atom } from '@bitspark/bitwire';
+import { atom } from '@bitspark/ontos-core';
 import { pair, addressed, bind } from '@bitspark/bitruntime/core';
 
 const [left, right] = pair();
