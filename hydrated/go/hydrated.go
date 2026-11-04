@@ -16,7 +16,8 @@ import (
 	"strconv"
 	"sync"
 
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
+	ontoswire "github.com/bitspark/ontos/wire/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
@@ -25,7 +26,6 @@ var (
 	_ wire.HydratedEndpoint = (*Endpoint)(nil)
 	_ wire.HydratedWire     = (*face)(nil)
 	_ wire.HydratedWire     = (*proxy)(nil)
-	_ wire.HydratedTuple    = Tuple{}
 )
 
 // Local is the context of a send that never left the process.
@@ -48,70 +48,30 @@ const (
 	ScopeEnded       Refusal = "scope-ended"
 )
 
-// Tuple is a hydrated tuple with at least one wire.HydratedWire beneath it. NewTuple returns
-// the ground tuple when there is none (D1).
-type Tuple struct{ items []wire.HydratedValue }
-
-// NewTuple captures items. Each must be an ontos value, a Tuple or a wire.HydratedWire. An
-// Endpoint is captured as its sending face: a value never carries receive or
-// close authority, on any path (D7).
-func NewTuple(items ...wire.HydratedValue) (wire.HydratedValue, error) {
-	captured := make([]wire.HydratedValue, len(items))
-	for i, item := range items {
-		captured[i] = sendOnly(item)
-	}
-	ground := make([]ontos.Value, 0, len(captured))
-	live := false
-	for _, item := range captured {
-		switch x := item.(type) {
-		case ontos.Atom:
-			ground = append(ground, x)
-		case ontos.Tuple:
-			ground = append(ground, x)
-		case Tuple, *face, *proxy:
-			live = true
-		case wire.HydratedWire:
-			return nil, Unexportable // only the runtime's own Wires are leaves (D1)
-		default:
-			return nil, errors.New("hydrated: not a value")
-		}
-	}
-	if live {
-		return Tuple{captured}, nil
-	}
-	return ontos.NewTuple(ground...), nil
-}
-
-// sendOnly projects an Endpoint to its sending face, and the zero Tuple, the
-// only one NewTuple does not make, to the ground empty tuple (D1, D7).
-func sendOnly(v wire.HydratedValue) wire.HydratedValue {
-	switch x := v.(type) {
+// nativeValues owns only the runtime's leaf policy. Immutable tuple storage,
+// ground collapse and factory qualification belong to ontos/wire.
+var nativeValues = ontoswire.NewNativeFactory(func(value any) (wire.HydratedWire, error) {
+	switch v := value.(type) {
 	case *Endpoint:
-		return x.face
-	case Tuple:
-		if x.items == nil {
-			return ontos.NewTuple()
-		}
+		if v != nil { return v.face, nil }
+	case *face:
+		if v != nil { return v, nil }
+	case *proxy:
+		if v != nil { return v, nil }
+	case wire.HydratedWire:
+		return nil, Unexportable
 	}
-	return v
+	return nil, errors.New("hydrated: not a value")
+})
+
+// NewTuple captures immediate children under the runtime's sending-face policy.
+func NewTuple(items ...wire.HydratedValue) (wire.HydratedValue, error) {
+	return nativeValues.Tuple(items...)
 }
 
-// Items returns the tuple's items.
-func (t Tuple) Items() []wire.HydratedValue { return append([]wire.HydratedValue(nil), t.items...) }
-
-// Items returns any tuple's items, ground or hydrated.
+// Items observes any tuple's immutable children; it confers no authority.
 func Items(v wire.HydratedValue) ([]wire.HydratedValue, bool) {
-	switch x := v.(type) {
-	case Tuple:
-		return x.Items(), true
-	case ontos.Tuple:
-		out := make([]wire.HydratedValue, x.Len())
-		for i, item := range x.Items() {
-			out[i] = item
-		}
-		return out, true
-	}
-	return nil, false
+	return ontoswire.NativeItems[wire.HydratedWire](v)
 }
 
 // Namespace identifies one set of participants addressed by absolute paths.
@@ -185,24 +145,9 @@ type delivery struct {
 type face struct{ e *Endpoint }
 
 func (f *face) Send(v wire.HydratedValue) error {
-	projected := sendOnly(v)
-	if err := checkLocal(projected); err != nil {
-		return err
-	}
+	projected, err := nativeValues.Capture(v)
+	if err != nil { return err }
 	return f.e.admit(projected, Local{})
-}
-
-// checkLocal validates a value for local delivery as dehydration would for a
-// remote one (D1, D7). A Tuple recognized its leaves when NewTuple built it and
-// is immutable, so only the top level needs checking; nothing is traversed.
-func checkLocal(v wire.HydratedValue) error {
-	switch v.(type) {
-	case ontos.Atom, ontos.Tuple, Tuple, *face, *proxy:
-		return nil
-	case wire.HydratedWire:
-		return Unexportable
-	}
-	return errors.New("hydrated: not a value")
 }
 
 // NewEndpoint creates an endpoint whose queue admits at most limit values. A
@@ -563,6 +508,8 @@ func (s *Scope) send(dest Reference, v wire.HydratedValue) error {
 }
 
 func (s *Scope) stage(dest Reference, v wire.HydratedValue) (ontos.Value, error) {
+	v, err := nativeValues.Capture(v)
+	if err != nil { return nil, err }
 	s.encodeMu.Lock()
 	defer s.encodeMu.Unlock()
 	staged := map[*Endpoint]ontos.Atom{}
@@ -648,7 +595,7 @@ func (s *Scope) toData(v wire.HydratedValue, depth int, staged map[*Endpoint]ont
 			return nil, err
 		}
 		return wire.NewHydratedDataAtom(x), nil
-	case ontos.Tuple, Tuple:
+	case ontos.Tuple, ontoswire.NativeTuple[wire.HydratedWire]:
 		if err := s.spend(b, depth, 0); err != nil {
 			return nil, err
 		}
@@ -691,8 +638,8 @@ func tupleIndex(v wire.HydratedValue) (int, func(int) wire.HydratedValue) {
 	switch x := v.(type) {
 	case ontos.Tuple:
 		return x.Len(), func(i int) wire.HydratedValue { return x.At(i) }
-	case Tuple:
-		return len(x.items), func(i int) wire.HydratedValue { return x.items[i] }
+	case ontoswire.NativeTuple[wire.HydratedWire]:
+		return x.Len(), x.At
 	}
 	return 0, nil
 }
@@ -721,6 +668,8 @@ func (s *Scope) fromData(d wire.HydratedData, interned map[string]wire.HydratedW
 
 // encodeBody and decodeBody are the body halves of a frame.
 func (s *Scope) encodeBody(v wire.HydratedValue, staged map[*Endpoint]ontos.Atom) (ontos.Value, error) {
+	v, err := nativeValues.Capture(v)
+	if err != nil { return nil, err }
 	d, err := s.toData(v, 0, staged, &budget{})
 	if err != nil {
 		return nil, err

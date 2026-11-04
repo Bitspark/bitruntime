@@ -23,7 +23,7 @@ import (
 	core "github.com/Bitspark/bitruntime/core/go"
 	hydrated "github.com/Bitspark/bitruntime/hydrated/go"
 	websocket "github.com/Bitspark/bitruntime/websocket/go"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 

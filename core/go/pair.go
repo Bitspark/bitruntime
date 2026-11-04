@@ -3,7 +3,7 @@ package core
 
 import (
 	"errors"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	"sync"
 )

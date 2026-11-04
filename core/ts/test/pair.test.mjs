@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {atom,tuple} from '@bitspark/bitwire';
+import { atom, tuple } from '@bitspark/ontos-core';
 import {checkWirePair} from '@bitspark/bitwire/conformance';
 import {pair,compose,select,route} from '../../../dist/core/ts/src/index.js';
 const e=(id=1)=>tuple([atom([id]),atom([0,255])]);

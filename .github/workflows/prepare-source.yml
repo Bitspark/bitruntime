@@ -1,0 +1,38 @@
+name: prepare-source
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Prepare formatting and dependency locks on the runner
+        shell: bash
+        run: |
+          trap 'git diff --binary > "$RUNNER_TEMP/source-preparation.patch"' EXIT
+          git ls-files -z '*.go' | xargs -0 -r gofmt -w
+          go mod tidy
+          npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org/
+          node scripts/naming.mjs --fix
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: source-preparation
+          path: ${{ runner.temp }}/source-preparation.patch
+          retention-days: 7
+      - name: Prepared artifacts must be committed
+        run: git diff --exit-code
+

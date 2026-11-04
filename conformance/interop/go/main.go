@@ -7,7 +7,7 @@ import (
 	"fmt"
 	core "github.com/Bitspark/bitruntime/core/go"
 	ws "github.com/Bitspark/bitruntime/websocket/go"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	"net/http"
 	"os"

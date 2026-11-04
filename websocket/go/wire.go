@@ -4,7 +4,7 @@ package websocket
 import (
 	"context"
 	"errors"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	"io"
 	"sync"
 	"time"

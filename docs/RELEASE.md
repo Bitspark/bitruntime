@@ -1,34 +1,26 @@
-# bitruntime 0.7.1
+# bitruntime 0.8.0
 
-0.7.1 publishes what 0.7.0 tagged: its library code is unchanged. The v0.7.0
-release run failed in its Go consumer smoke on Linux after the tag, so v0.7.0
-has a public Go module but no GitHub release or tarball. The smoke is fixed and
-CI now runs it against each pushed commit.
+This release uses bitwire 0.7.0 and public ontos 0.16.0. The optional ontos/wire
+package owns the Go and TypeScript native mixed-value structure. The runtime
+supplies its private capability-recognition and sending-face policy to that
+factory. See the [migration contract](ONTOS-WIRE.md).
 
-## The hydrated layer, introduced in 0.7.0
+The runtime's duplicate tuple implementation and exported tuple class/type are
+removed. Use `hydratedTuple` / `NewTuple` for runtime-qualified construction and
+`items` / `Items` for observation. Ground values come directly from the public
+ontos packages; the old bitwire ground subpaths and re-exports are removed.
 
-This release adds the hydrated wire layer, realizing bitwire decision 0019 over
-bitwire 0.6.0's public hydrated declarations and shared pure codec. A message may
-carry live Wires inside its structure. A Wire travels as a reference that its
-receiver turns back into a usable send-only Wire. A reference returning to its
-owner restores the original Wire. Routers between participants see only ground
-values.
+Transport bytes and protocol names remain unchanged: ontos-codec-v1,
+bitwire/addressed/1, bitwire.ontos.v2 and bitwire/hydrated/1. Export/import,
+namespace, ownership, lifetime, liveness, context, queue, dispatch and D8 counting
+rules remain runtime responsibilities. Foreign-factory tuples cannot hide owner
+handles from local or remote admission. Deep and shared native values retain
+their existing operational behavior.
 
-`hydrated/go` and the TypeScript subpath `/hydrated` provide:
-- **Scopes.** One per participant incarnation, with a random token. Export ids
-  are 16 unpredictable octets, so one reference never reveals another.
-- **Endpoints.** Their sending faces are the only exportable local Wires. An
-  export ends when its endpoint closes, a receiver failure terminates the
-  endpoint, and termination is reported as bitwire's `Termination`.
-- **Proxies.** Recognized throughout the namespace, so forwarding never wraps a
-  proxy in another.
-- **Liveness and context.** Liveness is judged on send. The composition's
-  received context is delivered beside each value, never inside it.
-- **Bounds.** Nodes, depth and bytes are counted one way in both directions.
-  Conversion refuses before allocating, and incoming frames count whole.
+The complete release gate retains Go race tests, TypeScript checks and tests,
+independent vectors, composition conformance, bidirectional Go/TypeScript
+interoperability, and fresh installed consumers. Go is distributed through the
+root tag; the TypeScript archive is a GitHub release asset with SHA256SUMS.
 
-Validation covers decision 0019's observations in Go and TypeScript, the
-independent vectors, the composition conformance suite, Go race tests,
-Go/TypeScript hydrated interoperability in both roles and fresh installed
-consumers. The core and WebSocket guarantees of 0.6.0 are unchanged. TypeScript
-ships as the release tarball with SHA256SUMS; Go ships through the root tag.
+This is a coordinated source/dependency cutover. It does not deploy existing
+services or add Function, Stream or Cell semantics to the runtime.

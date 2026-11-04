@@ -3,7 +3,7 @@
 // routes and ground values, over local pairs or real WebSockets. Consumer suites
 // import it rather than editing hydrated.test.mjs.
 import assert from 'node:assert/strict';
-import { atom } from '@bitspark/bitwire';
+import { atom } from '@bitspark/ontos-core';
 import { pair, addressed } from '../../../dist/core/ts/src/index.js';
 import { listenWebSocket, connectWebSocket } from '../../../dist/websocket/ts/src/index.js';
 import { Endpoint, Namespace, Scope, hydratedTuple } from '../../../dist/hydrated/ts/src/index.js';

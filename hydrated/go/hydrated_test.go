@@ -17,11 +17,40 @@ import (
 
 	core "github.com/Bitspark/bitruntime/core/go"
 	websocket "github.com/Bitspark/bitruntime/websocket/go"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
+	ontoswire "github.com/bitspark/ontos/wire/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
 func text(s string) ontos.Atom { return ontos.NewAtom([]byte(s)) }
+
+func TestSharedNativeFactoryCannotConcealOwnership(t *testing.T) {
+	endpoint, owner := NewEndpoint(1), NewEndpoint(1)
+	defer endpoint.Close()
+	defer owner.Close()
+	foreign := ontoswire.NewNativeFactory(func(value any) (wire.HydratedWire, error) {
+		return value.(wire.HydratedWire), nil
+	})
+	concealed, err := foreign.Tuple(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := endpoint.Wire().Send(concealed); !errors.Is(err, ontoswire.ErrNativeValue) {
+		t.Fatal("foreign qualification bypassed local admission", err)
+	}
+	scope := &Scope{limits: DefaultLimits}
+	if _, err := scope.encodeBody(concealed, map[*Endpoint]ontos.Atom{}); !errors.Is(err, ontoswire.ErrNativeValue) {
+		t.Fatal("foreign qualification bypassed export admission", err)
+	}
+	qualified, err := NewTuple(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, _ := Items(qualified)
+	if items[0] != owner.Wire() {
+		t.Fatal("owner was not projected to its sending face")
+	}
+}
 
 // The raw grammar, for crafting frames by hand; the runtime itself uses the codec.
 var (
@@ -99,9 +128,9 @@ func wires(v wire.HydratedValue) int {
 	switch x := v.(type) {
 	case wire.HydratedWire:
 		return 1
-	case Tuple:
+	case ontoswire.NativeTuple[wire.HydratedWire]:
 		n := 0
-		for _, item := range x.items {
+		for _, item := range x.Items() {
 			n += wires(item)
 		}
 		return n
@@ -1031,7 +1060,7 @@ func TestObservation17ZeroTupleIsGround(t *testing.T) {
 	got := make(chan wire.HydratedValue, 1)
 	local := NewEndpoint(1)
 	_, _ = local.Receive(func(v wire.HydratedValue, _ wire.ReceivedContext) { got <- v })
-	_ = local.Wire().Send(Tuple{})
+	_ = local.Wire().Send(ontoswire.NativeTuple[wire.HydratedWire]{})
 	if v, ok := (<-got).(ontos.Tuple); !ok || v.Len() != 0 {
 		t.Fatal("the zero hydrated tuple was not delivered as the ground empty tuple")
 	}

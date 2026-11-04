@@ -39,7 +39,8 @@ writeFileSync(join(temp, 'package.json'), '{"type":"module","private":true}\n');
 run(npm, ['install', '--ignore-scripts', '--no-audit', '--@bitspark:registry=https://registry.npmjs.org', join(temp, packed[0].filename)], temp);
 writeFileSync(join(temp, 'smoke.mjs'), `
 import assert from 'node:assert/strict';
-import {atom,tuple,pathEqual} from '@bitspark/bitwire';
+import { atom, tuple } from '@bitspark/ontos-core';
+import { pathEqual } from '@bitspark/bitwire';
 import {pair,compose,addressed,bind,asAddressed} from '@bitspark/bitruntime/core';
 import {connectWebSocket,listenWebSocket} from '@bitspark/bitruntime/websocket';
 import {Endpoint,Namespace,Scope,hydratedTuple,items} from '@bitspark/bitruntime/hydrated';

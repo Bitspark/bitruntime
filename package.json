@@ -1,6 +1,6 @@
 {
   "name": "@bitspark/bitruntime",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Addressless endpoints, addressed access, byte-keyed trees, local pairs and WebSocket carriers.",
   "license": "Apache-2.0",
   "type": "module",
@@ -39,8 +39,10 @@
     "test": "npm run build && node --test --test-timeout=30000 \"core/ts/test/*.test.mjs\" \"websocket/ts/test/*.test.mjs\" \"hydrated/ts/test/*.test.mjs\""
   },
   "dependencies": {
-    "@bitspark/bitwire": "0.6.0",
-    "ws": "8.22.0"
+    "@bitspark/bitwire": "0.7.0",
+    "ws": "8.22.0",
+    "@bitspark/ontos-core": "0.16.0",
+    "@bitspark/ontos-wire": "0.16.0"
   },
   "devDependencies": {
     "@bitspark/deixis-core": "0.6.0",

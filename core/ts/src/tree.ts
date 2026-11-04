@@ -1,4 +1,5 @@
-import { Atom, type Children, type DeixisNode, type Value, type Path } from '@bitspark/bitwire';
+import { Atom, type Value } from '@bitspark/ontos-core';
+import { type Children, type DeixisNode, type Path } from '@bitspark/bitwire';
 export function compose<T>(own: T, children: Children<T> = []): DeixisNode<T> {
   const captured: Children<T> = Object.freeze(children.map(([key,node])=> {
     if(!(key instanceof Atom)||!node)throw new TypeError('invalid child');

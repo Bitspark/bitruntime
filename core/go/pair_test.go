@@ -2,7 +2,7 @@ package core_test
 
 import (
 	core "github.com/Bitspark/bitruntime/core/go"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	"testing"
 	"time"

@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {compose as composeBytes} from '@bitspark/deixis-core';
-import {atom, tuple} from '@bitspark/bitwire';
+import { atom, tuple } from '@bitspark/ontos-core';
 import {compose, asAddressed, addressed, pair, route} from '../../../dist/core/ts/src/index.js';
 
 // Each implementation is checked against these hand-written observations. The

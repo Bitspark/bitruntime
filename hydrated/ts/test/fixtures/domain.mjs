@@ -1,5 +1,5 @@
 // Consumer-only request and ownership convention. No Scope, route or reference API.
-import { Atom, atom } from '@bitspark/bitwire';
+import { Atom, atom } from '@bitspark/ontos-core';
 import { Endpoint, hydratedTuple, items } from '../../../../dist/hydrated/ts/src/index.js';
 
 export const text = value => atom(new TextEncoder().encode(value));

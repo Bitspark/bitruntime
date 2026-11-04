@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	core "github.com/Bitspark/bitruntime/core/go"
-	ontos "github.com/Bitspark/bitwire/ontos/go/core"
+	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	deixis "github.com/bitspark/deixis/core/go"
 )

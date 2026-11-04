@@ -1,16 +1,13 @@
+import { NativeFactory, NativeTuple, nativeItems } from '@bitspark/ontos-wire/native';
 // The realization of bitwire decision 0019, the hydrated wire protocol's first
 // edition, over bitwire's public hydrated declarations and its shared pure codec.
 // The codec owns the grammar, validation and bounds; this module owns export ids
 // and staging, reference recognition, liveness and endpoints.
-import {
-  Atom, Tuple, atom, tuple, pathEqual,
-  HydratedCodecError, HydratedDataAtom, HydratedDataTuple, HydratedReference,
-  packHydratedBody, unpackHydratedBody, packHydratedFrame, unpackHydratedFrame,
-  packHydratedReference, unpackHydratedReference,
-} from '@bitspark/bitwire';
+import { Atom, Tuple, atom, tuple } from '@bitspark/ontos-core';
+import { pathEqual, HydratedCodecError, HydratedDataAtom, HydratedDataTuple, HydratedReference, packHydratedBody, unpackHydratedBody, packHydratedFrame, unpackHydratedFrame, packHydratedReference, unpackHydratedReference } from '@bitspark/bitwire';
 import type {
   Path, AddressedWire, Termination, HydratedValue, HydratedWire, HydratedEndpoint, ReceivedContext,
-  HydratedData, HydratedCodecLimits, HydratedTuple as HydratedTupleView,
+  HydratedData, HydratedCodecLimits,
 } from '@bitspark/bitwire';
 
 /** The context of a send that never left the process. */
@@ -34,64 +31,26 @@ export class Refusal extends Error {
   }
 }
 
-/** A tuple with at least one HydratedWire beneath it; see hydratedTuple (D1). */
-/** Only this module constructs hydrated tuples, so every one is canonical (D1, D7). */
-const CONSTRUCT = Symbol('hydrated tuple');
-
-/**
- * A tuple with at least one HydratedWire beneath it, shaped like bitwire's HydratedTuple
- * (a ground Tuple has the same shape). Construct it with hydratedTuple().
- */
-export class HydratedTuple implements HydratedTupleView {
-  readonly kind = 'tuple' as const;
-  readonly #items: readonly HydratedValue[];
-  constructor(items: readonly HydratedValue[], token?: symbol) {
-    if (token !== CONSTRUCT) throw new TypeError('hydrated: construct tuples with hydratedTuple()');
-    this.#items = Object.freeze([...items]);
-    Object.freeze(this);
-  }
-  get length(): number { return this.#items.length; }
-  items(): readonly HydratedValue[] { return this.#items; }
-  at(index: number): HydratedValue | undefined { return this.#items.at(index); }
-}
-
-// Any HydratedWire may sit in a tuple; encoding refuses one the runtime does not own (D7).
-const isWire = (v: unknown): v is HydratedWire => typeof (v as HydratedWire | undefined)?.send === 'function';
-
-/** An Endpoint travels only as its sending face, on every path (D7). */
-const sendOnly = (v: HydratedValue): HydratedValue => (v instanceof Endpoint ? v.wire : v);
-
-/**
- * Validates a value for local delivery as dehydration would for a remote one (D1,
- * D7): only runtime-recognized leaves arrive, and an endpoint arrives as its face.
- */
-function local(v: HydratedValue): HydratedValue {
-  // A tuple recognized its leaves when it was built and is immutable, so only
-  // the top level needs checking; no traversal is needed.
-  const projected = sendOnly(v);
-  if (projected instanceof Atom || projected instanceof Tuple || projected instanceof HydratedTuple) return projected;
-  if (projected instanceof Face || projected instanceof Proxy) return projected;
-  if (projected && typeof (projected as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
+// The private factory supplies recognition/attenuation, never structure or
+// liveness. A tuple made by any other policy cannot bypass this qualification.
+const nativeValues = new NativeFactory<HydratedWire>((value: unknown) => {
+  if (value instanceof Endpoint) return value.wire;
+  if (value instanceof Face || value instanceof Proxy) return value;
+  if (value && typeof (value as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
   throw new TypeError('hydrated: not a value');
-}
+});
 
-/** Captures items; returns the ground tuple when no HydratedWire is beneath them. */
+/** Shallow qualification preserves local identity without unfolding shared trees. */
+const local = (value: HydratedValue): HydratedValue => nativeValues.capture(value);
+
+/** Captures immediate children and projects owners to their sending faces. */
 export function hydratedTuple(items: readonly HydratedValue[]): HydratedValue {
-  const captured = items.map(sendOnly);
-  let live = false;
-  for (const item of captured) {
-    if (item instanceof HydratedTuple || item instanceof Face || item instanceof Proxy) live = true;
-    else if (isWire(item)) throw new Refusal(UNEXPORTABLE); // only the runtime's own Wires are leaves (D1)
-    else if (!(item instanceof Atom) && !(item instanceof Tuple)) throw new TypeError('hydrated: not a value');
-  }
-  return live ? new HydratedTuple(captured, CONSTRUCT) : tuple(captured as (Atom | Tuple)[]);
+  return nativeValues.tuple(items);
 }
 
-/** Any tuple's items, ground or hydrated. */
-export function items(v: HydratedValue): readonly HydratedValue[] | undefined {
-  if (v instanceof HydratedTuple) return v.items();
-  if (v instanceof Tuple) return v.items();
-  return undefined;
+/** Observes immutable tuple structure; does not establish runtime authority. */
+export function items(value: HydratedValue): readonly HydratedValue[] | undefined {
+  return nativeItems(value);
 }
 
 /** One set of participants addressed by absolute paths (D6). */
@@ -365,11 +324,11 @@ export class Scope {
       if (nodes > limits.nodes || depth > limits.depth || bytes > limits.bytes) throw new Refusal(LIMIT);
     };
     // Tuples are indexed, never copied; outputs grow as children are counted.
-    const frames: { tuple: Tuple | HydratedTuple; depth: number; out: HydratedData[] }[] = [];
+    const frames: { tuple: Tuple | NativeTuple<HydratedWire>; depth: number; out: HydratedData[] }[] = [];
     const visit = (value: HydratedValue, depth: number): HydratedData | undefined => {
       const v = value instanceof Endpoint ? value.wire : value;
       if (v instanceof Atom) { spend(depth, v.length); return new HydratedDataAtom(v); }
-      if (v instanceof Tuple || v instanceof HydratedTuple) {
+      if (v instanceof Tuple || v instanceof NativeTuple) {
         spend(depth, 0);
         frames.push({ tuple: v, depth, out: [] });
         return undefined;
@@ -386,7 +345,7 @@ export class Scope {
       if (v && typeof (v as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
       throw new TypeError('hydrated: not a value');
     };
-    const first = visit(root, 0);
+    const first = visit(local(root), 0);
     if (first) return first;
     for (;;) {
       const top = frames[frames.length - 1]!;
