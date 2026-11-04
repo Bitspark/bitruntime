@@ -1,5 +1,6 @@
 import {compose as composeBytes, type DeixisNode as BytesNode} from '@bitspark/deixis-core';
-import {atom, type DeixisNode, type Wire, type WireNode} from '@bitspark/bitwire';
+import { atom } from '@bitspark/ontos-core';
+import { type DeixisNode, type Wire, type WireNode } from '@bitspark/bitwire';
 import {compose, asAddressed} from '../src/index.js';
 
 // Check each independently declared structural surface, rather than concealing

@@ -1,6 +1,5 @@
-import { capturePath, packAddressed, unpackAddressed,
-  type Endpoint, type AddressedEndpoint, type Wire, type AddressedWire,
-  type WireNode, type Path, type Value } from '@bitspark/bitwire';
+import { type Value } from '@bitspark/ontos-core';
+import { capturePath, packAddressed, unpackAddressed, type Endpoint, type AddressedEndpoint, type Wire, type AddressedWire, type WireNode, type Path } from '@bitspark/bitwire';
 
 // Inert facade: receiving is attached only by receive(), with the raw owner's lifetime.
 export function addressed(endpoint: Endpoint): AddressedEndpoint {

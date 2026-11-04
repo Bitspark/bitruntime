@@ -4,12 +4,69 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { Atom, Tuple, atom, tuple, encodeMessage } from '@bitspark/bitwire';
+import { Atom, Tuple, atom, tuple } from '@bitspark/ontos-core';
+import { encodeMessage } from '@bitspark/bitwire';
 import {
   Endpoint, Namespace, Scope, Refusal, hydratedTuple, items,
   UNKNOWN_EXPORT, STALE_SCOPE, UNEXPORTABLE, FOREIGN_NAMESPACE, MALFORMED_FRAME,
 } from '../../../dist/hydrated/ts/src/index.js';
 import { text, str, eventually, PATHS, tree, serve, call } from './harness.mjs';
+import { NativeFactory, NativeValueError } from '@bitspark/ontos-wire/native';
+
+test('qualification uses private endpoint faces and genuine capability instances', async () => {
+  const endpoint = new Endpoint(4), owner = new Endpoint(1);
+  const face = owner.wire;
+  const foreign = { kind: 'wire', send: async () => {}, close() {} };
+  owner.wire = foreign;
+  const received = [];
+  endpoint.receive(v => received.push(v));
+  await endpoint.wire.send(owner);
+  await endpoint.wire.send(hydratedTuple([owner]));
+  await eventually(() => received.length === 2, 'qualified values not delivered');
+  assert.equal(received[0], face);
+  assert.equal(items(received[1])[0], face);
+  assert.equal('close' in face, false);
+  const scope = new Scope(new Namespace('private-membership'), [], { send: async () => {} });
+  const proxy = scope.connect({ path: [text('remote')], scope: atom(new Uint8Array(16)), id: atom(new Uint8Array(16)) });
+  const fakeOwner = Object.assign(Object.create(Endpoint.prototype), { wire: foreign });
+  const fakes = [fakeOwner, Object.create(Object.getPrototypeOf(face)), Object.create(Object.getPrototypeOf(proxy))];
+  for (const fake of fakes) {
+    await assert.rejects(endpoint.wire.send(fake), e => e.reason === UNEXPORTABLE);
+    assert.throws(() => hydratedTuple([fake]), e => e.reason === UNEXPORTABLE);
+    assert.throws(() => scope._encodeBody(fake, new Map()), e => e.reason === UNEXPORTABLE);
+  }
+  const staged = new Map();
+  scope._encodeBody(hydratedTuple([owner]), staged);
+  assert.equal(staged.size, 1);
+  assert.equal(staged.has(owner), true);
+  const home = scope.expose(owner);
+  assert.equal(scope.connect(home), face, 'a local reference recovers the stable sending face');
+  const body = scope._encodeBody(owner, new Map());
+  assert.equal(scope._decodeBody(body, new Map()), face, 'a returning-home leaf recovers the stable sending face');
+  scope.close();
+  await endpoint.close();
+  await owner.close();
+});
+
+test('shared native tuples require this runtime factory on local and remote paths', async () => {
+  const endpoint = new Endpoint(2), owner = new Endpoint(2);
+  const foreign = new NativeFactory(value => value);
+  const concealed = foreign.tuple([owner]);
+  let received = false;
+  endpoint.receive(() => { received = true; });
+  await assert.rejects(endpoint.wire.send(concealed), NativeValueError);
+  const scope = new Scope(new Namespace('foreign-native'), [], { send: async () => { throw new Error('must not send'); } });
+  assert.throws(() => scope._encodeBody(concealed, new Map()), NativeValueError);
+  const hostile = [owner];
+  hostile.map = () => [{ send() {}, close() {} }];
+  const captured = hydratedTuple(hostile);
+  assert.equal(items(captured)[0], owner.wire);
+  assert.equal('close' in items(captured)[0], false);
+  assert.equal(received, false);
+  scope.close();
+  await endpoint.close();
+  await owner.close();
+});
 
 test('observation 1: vectors round-trip (bitwire#83 accepted at 6e33fb3, pinned)', () => {
   const raw = readFileSync(new URL('../../go/testdata/hydrated-vectors.json', import.meta.url));
@@ -283,10 +340,10 @@ test('observation 15, symmetry: sender and receiver count a value alike', async 
 });
 
 test('observation 17, construction: the exported tuple class cannot bypass projection', async () => {
-  const { HydratedTuple } = await import('../../../dist/hydrated/ts/src/index.js');
+  const { NativeTuple } = await import('@bitspark/ontos-wire/native');
   const priv = new Endpoint(1);
-  assert.throws(() => new HydratedTuple([priv]), /hydratedTuple/);
-  assert.throws(() => new HydratedTuple([text('ground')]), /hydratedTuple/);
+  assert.throws(() => new NativeTuple(Symbol(), {}, [priv]), /NativeFactory/);
+  assert.throws(() => new NativeTuple(Symbol(), {}, [text('ground')]), /NativeFactory/);
   const got = [];
   const local = new Endpoint(4);
   local.receive((v) => got.push(v));

@@ -1,7 +1,8 @@
 // A single WebSocket endpoint realizing the generic Endpoint lifecycle.
 import WebSocket from 'ws';
 import type { RawData } from 'ws';
-import type { Value, Endpoint, Termination } from '@bitspark/bitwire';
+import type { Value } from '@bitspark/ontos-core';
+import type { Endpoint, Termination } from '@bitspark/bitwire';
 import type { WebSocketEndpointOptions } from './options.ts';
 import { encodeMessage, decodeMessage, DEFAULT_MAX_MESSAGE_BYTES } from '@bitspark/bitwire';
 import { positiveLimit } from '../../../core/ts/src/limits.ts';

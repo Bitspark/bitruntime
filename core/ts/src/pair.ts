@@ -1,4 +1,5 @@
-import { encodeMessage, type Value, type Endpoint, type Termination } from '@bitspark/bitwire';
+import { type Value } from '@bitspark/ontos-core';
+import { encodeMessage, type Endpoint, type Termination } from '@bitspark/bitwire';
 import { pairOptions, type PairOptions } from './limits.ts';
 class PairEndpoint implements Endpoint {
   readonly closed: Promise<Termination>;

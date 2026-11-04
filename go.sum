@@ -1,6 +1,10 @@
-github.com/Bitspark/bitwire v0.6.0 h1:Da4R/tRW+hw615DrsaPJ2KwFz0s/kagKdgN9nXfOf1s=
-github.com/Bitspark/bitwire v0.6.0/go.mod h1:RCsIrMm1o0hg/SlyG2LkXXSzj2CMLEhoOIuuw8XrePk=
+github.com/Bitspark/bitwire v0.7.0 h1:5VnpAiiQ9SoyGra87O+/r9huTkm+Vy/VVyGCbCUm7to=
+github.com/Bitspark/bitwire v0.7.0/go.mod h1:WedbikTlAIMhqnP7ALzbusHYwV1HRjK+w11MpCd8S8k=
 github.com/bitspark/deixis v0.6.0 h1:YAbZiEB+wlQtZoTwLd2+3xGagsfVqmOEH0Fh+fzzaOA=
 github.com/bitspark/deixis v0.6.0/go.mod h1:jw08wxGevbjoJPBnUaDX549ayvjIOOlLk5GXhIkxu5A=
+github.com/bitspark/ontos v0.16.0 h1:/LA9+ukd9+/WgIWLShUwlTB06bfpqEo43t9CGh9umgY=
+github.com/bitspark/ontos v0.16.0/go.mod h1:GLOg9USEPJXJ7RN7iiOJ7OVlyM8b3X4lN0ZVTg2G3QY=
+github.com/bitspark/ontos/wire/go v0.16.0 h1:yxuAMqLzizIALYlM1gryR76xfSDn9gFqRZKuWZPABWc=
+github.com/bitspark/ontos/wire/go v0.16.0/go.mod h1:SsVBydSV21ifocddxxKuyZ7zZ21F5OPV2Vot74YM3GI=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=

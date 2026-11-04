@@ -1,12 +1,13 @@
 # Hydrated wires
 
-**Status, 7 October 2026:** the realization of bitwire decision 0019, the hydrated
+**Status, 4 November 2026:** the realization of bitwire decision 0019, the hydrated
 wire protocol's first edition, accepted at bitwire `5b1de82`, for bitruntime
-0.7.1 (first implemented in 0.7.0). It implements bitwire 0.6.0's public hydrated
+0.8.0 (first implemented in 0.7.0). It implements bitwire 0.7.0's public hydrated
 declarations
 (`HydratedValue`, `HydratedWire`, `HydratedEndpoint`, `ReceivedContext`) and
 encodes and decodes through bitwire's shared pure hydrated codec, which owns the
-grammar and its bounds. No private copy of either remains here.
+grammar and its bounds. No private copy of either remains here. The shared native
+value structure now comes from ontos/wire; see [the migration contract](../docs/ONTOS-WIRE.md).
 
 [The Go package](go/hydrated.go) and [the TypeScript module](ts/src/index.ts)
 hold the stateful half of the protocol:

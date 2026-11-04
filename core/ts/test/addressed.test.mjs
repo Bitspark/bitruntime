@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {atom,tuple,pathEqual} from '@bitspark/bitwire';
+import { atom, tuple } from '@bitspark/ontos-core';
+import { pathEqual } from '@bitspark/bitwire';
 import {checkAddressedEndpoints} from '@bitspark/bitwire/conformance';
 import {pair,addressed,bind,under,asAddressed,compose,MissingPathError} from '../../../dist/core/ts/src/index.js';
 
