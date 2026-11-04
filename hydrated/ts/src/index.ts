@@ -33,9 +33,16 @@ export class Refusal extends Error {
 
 // The private factory supplies recognition/attenuation, never structure or
 // liveness. A tuple made by any other policy cannot bypass this qualification.
+const endpointFaces = new WeakMap<Endpoint, Face>();
+const proxies = new WeakSet<Proxy>();
 const nativeValues = new NativeFactory<HydratedWire>((value: unknown) => {
-  if (value instanceof Endpoint) return value.wire;
-  if (value instanceof Face || value instanceof Proxy) return value;
+  if (value instanceof Endpoint) {
+    const face = endpointFaces.get(value);
+    if (!face) throw new Refusal(UNEXPORTABLE);
+    return face;
+  }
+  if (value instanceof Face && owners.has(value)) return value;
+  if (value instanceof Proxy && proxies.has(value)) return value;
   if (value && typeof (value as HydratedWire).send === 'function') throw new Refusal(UNEXPORTABLE);
   throw new TypeError('hydrated: not a value');
 });
@@ -105,10 +112,11 @@ export class Endpoint implements HydratedEndpoint {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new RangeError('hydrated: an endpoint bound must be a positive integer');
     this.#limit = limit;
     this.wire = new Face(this);
+    endpointFaces.set(this, this.wire as Face);
     this.closed = new Promise((resolve) => { this.#resolveClosed = resolve; });
   }
 
-  send(value: HydratedValue): Promise<void> { return this.wire.send(value); }
+  send(value: HydratedValue): Promise<void> { return endpointFaces.get(this)!.send(value); }
 
   /** Attaches the one receiver; its detach removes only that receiver. */
   receive(handler: (value: HydratedValue, context: ReceivedContext) => void): () => void {
@@ -197,6 +205,7 @@ class Proxy implements HydratedWire {
   readonly #dead: string | undefined;
   constructor(ref: Reference, ns: Namespace, via: Scope, dead?: string) {
     this.ref = ref; this.ns = ns; this.#via = via; this.#dead = dead;
+    proxies.add(this);
     Object.freeze(this);
   }
   async send(value: HydratedValue): Promise<void> {
@@ -326,7 +335,7 @@ export class Scope {
     // Tuples are indexed, never copied; outputs grow as children are counted.
     const frames: { tuple: Tuple | NativeTuple<HydratedWire>; depth: number; out: HydratedData[] }[] = [];
     const visit = (value: HydratedValue, depth: number): HydratedData | undefined => {
-      const v = value instanceof Endpoint ? value.wire : value;
+      const v = local(value);
       if (v instanceof Atom) { spend(depth, v.length); return new HydratedDataAtom(v); }
       if (v instanceof Tuple || v instanceof NativeTuple) {
         spend(depth, 0);
