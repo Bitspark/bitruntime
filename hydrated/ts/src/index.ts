@@ -418,7 +418,7 @@ export class Scope {
     if (pathEqual(ref.path, this.path)) {
       if (!ref.scope.equals(this.token)) return new Proxy(ref, this.ns, this, STALE_SCOPE);
       const endpoint = this.#byId.get(hex(ref.id));
-      return endpoint ? endpoint.wire : new Proxy(ref, this.ns, this, UNKNOWN_EXPORT);
+      return endpoint ? endpointFaces.get(endpoint)! : new Proxy(ref, this.ns, this, UNKNOWN_EXPORT);
     }
     const k = refKey(ref);
     let w = interned.get(k);

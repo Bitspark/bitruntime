@@ -39,6 +39,10 @@ test('qualification uses private endpoint faces and genuine capability instances
   scope._encodeBody(hydratedTuple([owner]), staged);
   assert.equal(staged.size, 1);
   assert.equal(staged.has(owner), true);
+  const home = scope.expose(owner);
+  assert.equal(scope.connect(home), face, 'a local reference recovers the stable sending face');
+  const body = scope._encodeBody(owner, new Map());
+  assert.equal(scope._decodeBody(body, new Map()), face, 'a returning-home leaf recovers the stable sending face');
   scope.close();
   await endpoint.close();
   await owner.close();
