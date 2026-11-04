@@ -17,9 +17,9 @@ import (
 
 	core "github.com/Bitspark/bitruntime/core/go"
 	websocket "github.com/Bitspark/bitruntime/websocket/go"
+	wire "github.com/Bitspark/bitwire/wire/go"
 	ontos "github.com/bitspark/ontos/core/go"
 	ontoswire "github.com/bitspark/ontos/wire/go"
-	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
 func text(s string) ontos.Atom { return ontos.NewAtom([]byte(s)) }

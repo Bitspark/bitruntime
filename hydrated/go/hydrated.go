@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"sync"
 
+	wire "github.com/Bitspark/bitwire/wire/go"
 	ontos "github.com/bitspark/ontos/core/go"
 	ontoswire "github.com/bitspark/ontos/wire/go"
-	wire "github.com/Bitspark/bitwire/wire/go"
 )
 
 // The runtime realizes bitwire's public hydrated declarations.
@@ -53,11 +53,17 @@ const (
 var nativeValues = ontoswire.NewNativeFactory(func(value any) (wire.HydratedWire, error) {
 	switch v := value.(type) {
 	case *Endpoint:
-		if v != nil { return v.face, nil }
+		if v != nil {
+			return v.face, nil
+		}
 	case *face:
-		if v != nil { return v, nil }
+		if v != nil {
+			return v, nil
+		}
 	case *proxy:
-		if v != nil { return v, nil }
+		if v != nil {
+			return v, nil
+		}
 	case wire.HydratedWire:
 		return nil, Unexportable
 	}
@@ -146,7 +152,9 @@ type face struct{ e *Endpoint }
 
 func (f *face) Send(v wire.HydratedValue) error {
 	projected, err := nativeValues.Capture(v)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	return f.e.admit(projected, Local{})
 }
 
@@ -509,7 +517,9 @@ func (s *Scope) send(dest Reference, v wire.HydratedValue) error {
 
 func (s *Scope) stage(dest Reference, v wire.HydratedValue) (ontos.Value, error) {
 	v, err := nativeValues.Capture(v)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	s.encodeMu.Lock()
 	defer s.encodeMu.Unlock()
 	staged := map[*Endpoint]ontos.Atom{}
@@ -669,7 +679,9 @@ func (s *Scope) fromData(d wire.HydratedData, interned map[string]wire.HydratedW
 // encodeBody and decodeBody are the body halves of a frame.
 func (s *Scope) encodeBody(v wire.HydratedValue, staged map[*Endpoint]ontos.Atom) (ontos.Value, error) {
 	v, err := nativeValues.Capture(v)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	d, err := s.toData(v, 0, staged, &budget{})
 	if err != nil {
 		return nil, err

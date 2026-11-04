@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	core "github.com/Bitspark/bitruntime/core/go"
-	ontos "github.com/bitspark/ontos/core/go"
 	wire "github.com/Bitspark/bitwire/wire/go"
 	deixis "github.com/bitspark/deixis/core/go"
+	ontos "github.com/bitspark/ontos/core/go"
 )
 
 type boundarySlot struct {
